@@ -656,7 +656,7 @@ HTML_TEMPLATE = """
   }
 
   .city-card {
-    background: var(--card-bg);
+    background: #ffffff;
     padding: 28px;
     cursor: pointer;
     transition: transform 0.2s ease, background 0.2s ease;
@@ -664,32 +664,28 @@ HTML_TEMPLATE = """
     position: relative;
     overflow: hidden;
   }
+  body.dark-mode .city-card { background: #1e1e2a; }
 
   .city-card.selected {
     background: var(--accent) !important;
-    color: white !important;
     transform: scale(1.02);
     z-index: 10;
   }
+  .city-card.selected .city-name      { color: #ffffff !important; }
+  .city-card.selected .city-country   { color: rgba(255,255,255,0.9) !important; }
+  .city-card.selected .city-condition { color: rgba(255,255,255,0.9) !important; }
+  .city-card.selected .city-temp      { color: #ffffff !important; }
+  .city-card.selected .card-stat-label { color: rgba(255,255,255,0.75) !important; }
+  .city-card.selected .card-stat-value { color: #ffffff !important; }
+  .city-card.selected .card-stats     { border-color: rgba(255,255,255,0.25) !important; }
 
-  .city-card.selected .city-name,
-  .city-card.selected .city-condition { color: white !important; }
-  .city-card.selected .city-country,
-  .city-card.selected .card-stat-label { color: rgba(255,255,255,0.7) !important; }
-  .city-card.selected .card-stats { border-color: rgba(255,255,255,0.2) !important; }
-
-  .city-card:hover {
-    background: var(--ink);
-    color: var(--paper);
-    transform: scale(1.02);
-    z-index: 10;
-  }
-
-  .city-card:hover .city-name { color: #f2ede6 !important; }
-  .city-card:hover .city-country { color: #aaa !important; }
-  .city-card:hover .city-condition { color: #ccc !important; }
-  .city-card:hover .card-stat-label { color: #888 !important; }
-  .city-card:hover .card-stat-value { color: #f2ede6; }
+  .city-card:hover { background: #111118; transform: scale(1.02); z-index: 10; }
+  .city-card:hover .city-name         { color: #ffffff !important; }
+  .city-card:hover .city-country      { color: #cccccc !important; }
+  .city-card:hover .city-condition    { color: #cccccc !important; }
+  .city-card:hover .card-stat-label   { color: #999999 !important; }
+  .city-card:hover .card-stat-value   { color: #ffffff !important; }
+  .city-card:hover .card-stats        { border-color: rgba(255,255,255,0.12) !important; }
 
   .city-header {
     display: flex;
@@ -705,23 +701,24 @@ HTML_TEMPLATE = """
     color: #0a0a0f;
     transition: color 0.2s;
   }
-
-  /* Dark mode: city name must stay dark since card bg is light-ish dark */
-  body.dark-mode .city-name { color: #f2ede6; }
+  body.dark-mode .city-name { color: #f0ede8; }
 
   .city-country {
     font-family: 'Space Mono', monospace;
-    font-size: 0.65rem;
-    letter-spacing: 2px;
-    color: #555;
+    font-size: 0.62rem;
+    letter-spacing: 1.5px;
+    color: #333333;
     text-transform: uppercase;
-    margin-top: 2px;
+    margin-top: 3px;
     transition: color 0.2s;
-    font-weight: 600;
+    font-weight: 700;
   }
-  body.dark-mode .city-country { color: #aaa; }
+  body.dark-mode .city-country { color: #b8b8cc; }
 
-  .city-icon { font-size: 2.2rem; }
+  .city-icon {
+    font-size: 2.2rem;
+    font-family: "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;
+  }
 
   .city-temp {
     font-family: 'Bebas Neue', sans-serif;
@@ -733,34 +730,39 @@ HTML_TEMPLATE = """
 
   .city-condition {
     font-size: 0.85rem;
-    color: var(--muted);
-    font-weight: 400;
+    color: #444444;
+    font-weight: 500;
     margin-bottom: 20px;
     transition: color 0.2s;
   }
+  body.dark-mode .city-condition { color: #a8a8bc; }
 
   .card-stats {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
     padding-top: 16px;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid #dddddd;
   }
-
-  .city-card:hover .card-stats {
-    border-color: rgba(255,255,255,0.1);
-  }
+  body.dark-mode .card-stats { border-color: #2e2e3e; }
 
   .card-stat-label {
     font-family: 'Space Mono', monospace;
     font-size: 0.55rem;
     letter-spacing: 1.5px;
-    color: var(--muted);
+    color: #666666;
     text-transform: uppercase;
     transition: color 0.2s;
+    font-weight: 600;
   }
+  body.dark-mode .card-stat-label { color: #8888a0; }
 
-  .card-stat-value { font-size: 0.9rem; font-weight: 600; }
+  .card-stat-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #111111;
+  }
+  body.dark-mode .card-stat-value { color: #e0ddd8; }
 
   /* FORECAST STRIP */
   .forecast-section { margin-bottom: 60px; }
@@ -1072,7 +1074,7 @@ HTML_TEMPLATE = """
         <div class="city-header">
           <div>
             <div class="city-name">{{ w.city }}</div>
-            <div class="city-country">{{ w.country }}</div>
+            <div class="city-country">{{ info[1] }}</div>
           </div>
           <div class="city-icon">{{ w.icon }}</div>
         </div>
