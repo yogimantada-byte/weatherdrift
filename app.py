@@ -1075,7 +1075,8 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 let currentCity = null;
 let isCelsius = true;
 let allCities = [];
-let historyData = {};   // city -> [temps over time]
+let historyData = {};   // UNUSED — kept for compat
+const histData = {};   // city -> [{t, temp, humidity, wind}]  ← single source of truth
 const COUNTRY_NAMES = {IN:'🇮🇳 India',JP:'🇯🇵 Japan',RU:'🇷🇺 Russia',ZA:'🇿🇦 South Africa',CUSTOM:'🌍 Custom'};
 
 function safe(v, s='') { return (v!==undefined && v!==null) ? v+s : '—'; }
@@ -1338,7 +1339,6 @@ function toggleNotifications() {
 }
 
 // ── History Chart ──────────────────────────────────────────────────────────
-const histData = {};   // city -> [{t, temp, humidity, wind}]
 let chartMode = 'temp';
 
 function setChartMode(mode, btn) {
@@ -1353,9 +1353,9 @@ function updateHistoryChart(city, weatherObj) {
   if (!histData[city]) histData[city] = [];
   histData[city].push({
     t: new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
-    temp: weatherObj.temp ?? weatherObj,
-    humidity: weatherObj.humidity ?? 65,
-    wind: weatherObj.wind_speed ?? 12,
+    temp:     typeof weatherObj === 'object' ? (weatherObj.temp     ?? 25) : weatherObj,
+    humidity: typeof weatherObj === 'object' ? (weatherObj.humidity ?? 65) : 65,
+    wind:     typeof weatherObj === 'object' ? (weatherObj.wind_speed ?? 12) : 12,
   });
   if (histData[city].length > 20) histData[city].shift();
   document.getElementById('history-city-label').textContent = city;
@@ -1426,8 +1426,9 @@ function drawChart(points) {
 
   // Area fill gradient
   const lineColor = chartMode==='temp' ? '#e8441a' : chartMode==='humidity' ? '#4fc3f7' : '#66bb6a';
+  const fillColor = chartMode==='temp' ? 'rgba(232,68,26,.18)' : chartMode==='humidity' ? 'rgba(79,195,247,.18)' : 'rgba(102,187,106,.18)';
   const grad = ctx.createLinearGradient(0, PAD.t, 0, PAD.t+cH);
-  grad.addColorStop(0, lineColor.replace('#','rgba(')+'88)'.replace('rgba(','rgba(').replace(/([0-9a-f]{2})/gi, (m,c)=>parseInt(c,16)+',').slice(0,-1)+',.25)');
+  grad.addColorStop(0, fillColor);
   grad.addColorStop(1, 'rgba(0,0,0,0)');
 
   // Draw gradient fill (simplified)
@@ -1439,7 +1440,7 @@ function drawChart(points) {
   ctx.lineTo(toX(points.length-1), PAD.t+cH);
   ctx.lineTo(PAD.l, PAD.t+cH);
   ctx.closePath();
-  ctx.fillStyle = chartMode==='temp' ? 'rgba(232,68,26,.12)' : chartMode==='humidity' ? 'rgba(79,195,247,.12)' : 'rgba(102,187,106,.12)';
+  ctx.fillStyle = grad;
   ctx.fill();
 
   // Main line (smooth)
@@ -1575,24 +1576,30 @@ function renderMapDots(weatherList) {
 
 // Map zoom/pan
 function mapZoom(factor) {
-  mapScale *= factor;
-  mapScale = Math.min(Math.max(mapScale, 0.8), 5);
+  mapScale = Math.min(Math.max(mapScale * factor, 0.8), 8);
   applyMapTransform();
 }
 function mapReset() { mapScale=1; mapTx=0; mapTy=0; applyMapTransform(); }
 function applyMapTransform() {
-  const g = document.getElementById('map-city-dots');
   const svg = document.getElementById('world-svg');
-  const transform = `scale(${mapScale}) translate(${mapTx}px,${mapTy}px)`;
-  if (svg) svg.style.transform = transform;
-  if (g)   g.style.transform   = transform;
+  if (svg) svg.style.transform = `scale(${mapScale}) translate(${mapTx}px,${mapTy}px)`;
 }
 
 // Drag to pan
 const mapWrap = document.getElementById('map-wrap');
 if (mapWrap) {
-  mapWrap.addEventListener('mousedown', e => { mapDragging=true; mapDragStart={x:e.clientX-mapTx*mapScale, y:e.clientY-mapTy*mapScale}; mapWrap.style.cursor='grabbing'; });
-  mapWrap.addEventListener('mousemove', e => { if(!mapDragging) return; mapTx=(e.clientX-mapDragStart.x)/mapScale; mapTy=(e.clientY-mapDragStart.y)/mapScale; applyMapTransform(); });
+  mapWrap.addEventListener('mousedown', e => {
+    mapDragging=true;
+    mapDragStart={x: e.clientX, y: e.clientY, tx: mapTx, ty: mapTy};
+    mapWrap.style.cursor='grabbing';
+    e.preventDefault();
+  });
+  mapWrap.addEventListener('mousemove', e => {
+    if(!mapDragging) return;
+    mapTx = mapDragStart.tx + (e.clientX - mapDragStart.x) / mapScale;
+    mapTy = mapDragStart.ty + (e.clientY - mapDragStart.y) / mapScale;
+    applyMapTransform();
+  });
   mapWrap.addEventListener('mouseup',   ()=>{ mapDragging=false; mapWrap.style.cursor='grab'; });
   mapWrap.addEventListener('mouseleave',()=>{ mapDragging=false; });
   mapWrap.addEventListener('wheel', e => { e.preventDefault(); mapZoom(e.deltaY<0?1.15:0.87); }, {passive:false});
@@ -1724,164 +1731,178 @@ const HIER_LABELS = {
 const HIER_ICONS = {
   country:'🌍', state:'🗺️', district:'📍', subdistrict:'🏘️', mandal:'🌾', village:'🏡'
 };
+// Leaf place types that should be directly selectable (not drilled into)
+const LEAF_TYPES = /village|hamlet|locality|neighbourhood|suburb|isolated|quarter|allotments/i;
 
-let hierStack  = [];   // [{level, name, osm_id, lat, lon, country_code, country_name, state, district}]
+let hierStack    = [];   // [{level, name, osm_id, lat, lon, country_code, country_name, state, district}]
 let hierSelected = null;
-let hierTimer  = null;
+let hierTimer    = null;
+let _hierResults = [];   // module-level, not stored on DOM
 
 function hierSearch(q) {
   clearTimeout(hierTimer);
-  if (!q.trim()) { renderHierResults([]); return; }
-  document.getElementById('hier-results-inner').innerHTML =
-    '<div style="padding:12px 16px;font-family:monospace;font-size:.65rem;color:#888;">Searching...</div>';
+  const inner = document.getElementById('hier-results-inner');
+  if (!q || !q.trim()) {
+    inner.innerHTML = '<div style="padding:12px 16px;font-family:monospace;font-size:.68rem;color:#666;">Type a name to search...</div>';
+    return;
+  }
+  inner.innerHTML = '<div style="padding:12px 16px;font-family:monospace;font-size:.68rem;color:#888;">Searching...</div>';
+
   const parentId = hierStack.length ? hierStack[hierStack.length-1].osm_id : '';
-  const level    = hierStack.length < HIER_LEVELS.length ? HIER_LEVELS[hierStack.length] : 'village';
+  const levelIdx = Math.min(hierStack.length, HIER_LEVELS.length - 1);
+  const level    = HIER_LEVELS[levelIdx];
+
   hierTimer = setTimeout(()=>{
-    fetch(`/api/hierarchy?q=${encodeURIComponent(q)}&parent_osm_id=${parentId}&level=${level}`)
-      .then(r=>r.json())
-      .then(d=>renderHierResults(d.results||[], level))
-      .catch(()=>renderHierResults([]));
+    fetch(`/api/hierarchy?q=${encodeURIComponent(q)}&parent_osm_id=${encodeURIComponent(parentId)}&level=${level}`)
+      .then(r => r.json())
+      .then(d => {
+        _hierResults = d.results || [];
+        renderHierResults(_hierResults, level);
+      })
+      .catch(() => {
+        inner.innerHTML = '<div style="padding:12px 16px;font-family:monospace;font-size:.68rem;color:#f44336;">Search failed. Try again.</div>';
+      });
   }, 380);
 }
 
 function renderHierResults(results, level) {
-  const inner = document.getElementById('hier-results-inner');
-  if (!results.length) {
-    inner.innerHTML='<div style="padding:12px 16px;font-family:monospace;font-size:.65rem;color:#666;">No results. Try a different name.</div>';
+  const inner    = document.getElementById('hier-results-inner');
+  const nextIdx  = HIER_LEVELS.indexOf(level) + 1;
+  const nextLevel= HIER_LEVELS[nextIdx];
+
+  if (!results || !results.length) {
+    inner.innerHTML = '<div style="padding:12px 16px;font-family:monospace;font-size:.68rem;color:#666;">No results found. Try a different name.</div>';
     return;
   }
-  const currentLevel = level || (hierStack.length < HIER_LEVELS.length ? HIER_LEVELS[hierStack.length] : 'village');
-  const nextLevel    = HIER_LEVELS[HIER_LEVELS.indexOf(currentLevel)+1];
-  inner.innerHTML = results.map((r,i) => {
-    const isLeaf = !nextLevel || r.place_type?.toLowerCase().match(/village|hamlet|locality|neighbourhood|suburb|isolated/);
-    const action = isLeaf
-      ? `onclick="selectHierPlace(${i}, true)"  style="cursor:pointer;"`
-      : `onclick="selectHierPlace(${i}, false)" style="cursor:pointer;"`;
+
+  inner.innerHTML = results.map((r, i) => {
+    const isLeaf = !nextLevel || LEAF_TYPES.test(r.place_type || '');
+    const leafFlag = isLeaf ? 1 : 0;
     const rightLabel = isLeaf
-      ? `<span style="color:#00c853;font-size:.58rem;font-weight:700;white-space:nowrap;">SELECT ✓</span>`
-      : `<span style="color:#e8441a;font-size:.58rem;white-space:nowrap;">${HIER_ICONS[nextLevel]||'▶'} ${HIER_LABELS[nextLevel]||'Drill down'} →</span>`;
-    return `<div data-idx="${i}" ${action} style="
-        padding:11px 16px;display:flex;justify-content:space-between;align-items:center;
-        border-bottom:1px solid var(--border);font-family:'Space Mono',monospace;font-size:.68rem;color:var(--ink);
-        transition:background .15s;"
-        onmouseover="this.style.background='rgba(232,68,26,.08)'"
-        onmouseout="this.style.background='transparent'">
-      <div>
-        <div style="font-weight:600;">${HIER_ICONS[currentLevel]||'📍'} ${r.name}</div>
-        <div style="color:var(--muted);font-size:.58rem;margin-top:2px;">${r.display||r.name}</div>
-      </div>
-      ${rightLabel}
-    </div>`;
+      ? `<span style="color:#00c853;font-size:.6rem;font-weight:700;white-space:nowrap;flex-shrink:0;">✓ SELECT</span>`
+      : `<span style="color:#e8441a;font-size:.6rem;white-space:nowrap;flex-shrink:0;">${nextLevel ? HIER_ICONS[nextLevel] : '▶'} Drill in →</span>`;
+    return `
+      <div onclick="selectHierPlace(${i},${leafFlag})" style="
+          padding:12px 16px;display:flex;justify-content:space-between;align-items:center;
+          border-bottom:1px solid var(--border);cursor:pointer;gap:12px;
+          font-family:'Space Mono',monospace;font-size:.68rem;color:var(--ink);transition:background .15s;"
+          onmouseover="this.style.background='rgba(232,68,26,.08)'"
+          onmouseout="this.style.background='transparent'">
+        <div style="min-width:0;">
+          <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${HIER_ICONS[level]||'📍'} ${r.name}
+          </div>
+          <div style="color:var(--muted);font-size:.58rem;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${r.display || r.name}
+          </div>
+        </div>
+        ${rightLabel}
+      </div>`;
   }).join('');
-  inner._results = results;
-  inner._level   = currentLevel;
 }
 
 function selectHierPlace(idx, isLeaf) {
-  const inner   = document.getElementById('hier-results-inner');
-  const results = inner._results || [];
-  const level   = inner._level   || 'country';
-  const r = results[idx]; if (!r) return;
+  const r = _hierResults[idx];
+  if (!r) return;
+  const levelIdx = Math.min(hierStack.length, HIER_LEVELS.length - 1);
+  const level    = HIER_LEVELS[levelIdx];
 
   if (isLeaf) {
-    // This is the final selection — show selected panel
     hierSelected = r;
     document.getElementById('hier-selected-name').textContent = r.name;
     document.getElementById('hier-selected-path').textContent =
-      (r.display||r.name) + (r.lat ? ` · ${r.lat.toFixed(4)}, ${r.lon.toFixed(4)}` : '');
+      (r.display || r.name) + (r.lat ? ` · ${parseFloat(r.lat).toFixed(4)}, ${parseFloat(r.lon).toFixed(4)}` : '');
     document.getElementById('hier-selected').style.display = 'block';
-    updateBreadcrumb(r, level);
+    updateBreadcrumb(r);
   } else {
-    // Drill down — push onto stack and search children
-    hierStack.push({...r, level});
-    updateBreadcrumb(null, null);
-    document.getElementById('hier-search').value = '';
-    document.getElementById('hier-search').placeholder = `Search within ${r.name}...`;
-    // Auto-fetch children
-    fetch(`/api/hierarchy?parent_osm_id=${r.osm_id}&level=${HIER_LEVELS[HIER_LEVELS.indexOf(level)+1]||'village'}`)
-      .then(res=>res.json())
-      .then(d=>{
-        const children = d.results||[];
-        renderHierResults(children, HIER_LEVELS[HIER_LEVELS.indexOf(level)+1]||'village');
-        if (!children.length) {
-          // No admin children — treat parent itself as leaf
-          hierSelected = r;
-          document.getElementById('hier-selected-name').textContent = r.name;
-          document.getElementById('hier-selected-path').textContent = r.display||r.name;
-          document.getElementById('hier-selected').style.display='block';
-        }
-      })
-      .catch(()=>renderHierResults([]));
+    // Push to stack and search children
+    hierStack.push({ ...r, level });
+    hierSelected = null;
+    document.getElementById('hier-selected').style.display = 'none';
+    updateBreadcrumb(null);
+    const searchEl = document.getElementById('hier-search');
+    searchEl.value = '';
+    searchEl.placeholder = `Search within ${r.name}...`;
+    searchEl.focus();
+    document.getElementById('hier-results-inner').innerHTML =
+      `<div style="padding:12px 16px;font-family:monospace;font-size:.68rem;color:#888;">
+        Now inside <b>${r.name}</b> — type to search ${HIER_LABELS[HIER_LEVELS[hierStack.length]] || 'places'} within it.
+      </div>`;
   }
 }
 
-function updateBreadcrumb(selected, level) {
+function updateBreadcrumb(selected) {
   const bc = document.getElementById('hier-breadcrumb');
   const parts = [
     `<span onclick="hierGoHome()" style="cursor:pointer;font-family:'Space Mono',monospace;font-size:.62rem;color:#e8441a;">🌍 Home</span>`
   ];
-  hierStack.forEach((s,i) => {
-    parts.push(`<span style="color:#555;font-size:.7rem;">›</span>`);
-    parts.push(`<span onclick="hierGoBack(${i})" style="cursor:pointer;font-family:'Space Mono',monospace;font-size:.62rem;color:var(--ink);text-decoration:underline;">${s.name}</span>`);
+  hierStack.forEach((s, i) => {
+    parts.push(`<span style="color:#888;margin:0 4px;">›</span>`);
+    // Clicking a stack entry goes back to that level (keep entries 0..i)
+    parts.push(`<span onclick="hierGoBack(${i+1})" style="cursor:pointer;font-family:'Space Mono',monospace;font-size:.62rem;color:var(--ink);text-decoration:underline dotted;">${s.name}</span>`);
   });
   if (selected) {
-    parts.push(`<span style="color:#555;font-size:.7rem;">›</span>`);
+    parts.push(`<span style="color:#888;margin:0 4px;">›</span>`);
     parts.push(`<span style="font-family:'Space Mono',monospace;font-size:.62rem;color:#00c853;font-weight:700;">${selected.name}</span>`);
   }
-  bc.innerHTML = parts.join(' ');
+  bc.innerHTML = parts.join('');
 }
 
 function hierGoHome() {
-  hierStack = [];
+  hierStack    = [];
   hierSelected = null;
-  document.getElementById('hier-selected').style.display='none';
-  document.getElementById('hier-search').value='';
-  document.getElementById('hier-search').placeholder='Search within current level...';
-  document.getElementById('hier-results-inner').innerHTML=
+  _hierResults = [];
+  document.getElementById('hier-selected').style.display = 'none';
+  document.getElementById('hier-search').value = '';
+  document.getElementById('hier-search').placeholder = 'Search within current level...';
+  document.getElementById('hier-results-inner').innerHTML =
     '<div style="padding:12px 16px;font-family:monospace;font-size:.68rem;color:#666;">Type a country, state or district name to begin browsing.</div>';
-  document.getElementById('hier-breadcrumb').innerHTML=
+  document.getElementById('hier-breadcrumb').innerHTML =
     '<span style="font-family:\'Space Mono\',monospace;font-size:.62rem;color:#666;">Start typing to explore...</span>';
 }
 
 function hierGoBack(idx) {
-  hierStack = hierStack.slice(0, idx);
+  // idx is the stack position to go BACK TO (keep 0..idx-1, discard idx and above)
+  hierStack    = hierStack.slice(0, idx);
   hierSelected = null;
-  document.getElementById('hier-selected').style.display='none';
-  document.getElementById('hier-search').value='';
+  _hierResults = [];
+  document.getElementById('hier-selected').style.display = 'none';
+  document.getElementById('hier-search').value = '';
   const parentName = hierStack.length ? hierStack[hierStack.length-1].name : '';
   document.getElementById('hier-search').placeholder = parentName ? `Search within ${parentName}...` : 'Search within current level...';
-  updateBreadcrumb(null,null);
-  renderHierResults([]);
+  document.getElementById('hier-results-inner').innerHTML =
+    `<div style="padding:12px 16px;font-family:monospace;font-size:.68rem;color:#888;">Type to search${parentName ? ` within <b>${parentName}</b>` : ''}...</div>`;
+  updateBreadcrumb(null);
 }
 
 function addHierCity() {
   if (!hierSelected) return;
   const r = hierSelected;
+  // Populate the quick-search form fields and call addCustomCity
   const nameEl = document.getElementById('add-city-name');
-  // Temporarily set values so addCustomCity() can read them
   nameEl.value = r.name;
   nameEl.dataset.countryCode = r.country_code || 'CUSTOM';
   nameEl.dataset.countryName = r.country_name || 'Custom';
-  document.getElementById('add-city-lat').value = r.lat;
-  document.getElementById('add-city-lon').value = r.lon;
+  document.getElementById('add-city-lat').value = parseFloat(r.lat).toFixed(4);
+  document.getElementById('add-city-lon').value = parseFloat(r.lon).toFixed(4);
   addCustomCity();
 }
 
 function previewHierCity() {
   if (!hierSelected) return;
   const r = hierSelected;
-  document.getElementById('featured-loading').style.display='inline';
-  document.querySelector('.featured-section').scrollIntoView({behavior:'smooth',block:'start'});
+  document.getElementById('featured-loading').style.display = 'inline';
+  document.querySelector('.featured-section').scrollIntoView({behavior:'smooth', block:'start'});
   fetch(`/api/preview?lat=${r.lat}&lon=${r.lon}&name=${encodeURIComponent(r.name)}&country=${encodeURIComponent(r.country_name||'')}`)
-    .then(res=>res.json())
-    .then(d=>{
+    .then(res => res.json())
+    .then(d => {
       updateFeaturedPanel(d);
-      updateForecast(d.city, d.forecast||[]);
-      document.getElementById('featured-loading').style.display='none';
+      updateForecast(d.city, d.forecast || []);
+      document.getElementById('featured-loading').style.display = 'none';
       const badge = document.getElementById('preview-badge');
-      if (badge) badge.style.display='inline-flex';
+      if (badge) badge.style.display = 'inline-flex';
     })
-    .catch(()=>{ document.getElementById('featured-loading').style.display='none'; });
+    .catch(() => { document.getElementById('featured-loading').style.display = 'none'; });
 }
 
 // ── Geocode search (OpenStreetMap Nominatim) ──────────────────────────────
@@ -2158,7 +2179,7 @@ document.querySelectorAll('.city-card').forEach(card=>{
 
 // Set rawc on feat-temp
 const ft=document.getElementById('feat-temp');
-if(ft) ft.dataset.rawc=parseFloat(ft.textContent)||25;
+if(ft) ft.dataset.rawc = parseFloat(ft.textContent.replace(/[^\d.\-]/g,'')) || 25;
 
 // Draw chart immediately with seeded data
 const _initCity = document.getElementById('history-city-label')?.textContent?.trim();
@@ -2349,6 +2370,177 @@ def geocode():
 
 @app.route("/api/hierarchy")
 def api_hierarchy():
+    """Search any administrative place using Nominatim free-text search with context."""
+    q         = request.args.get("q", "").strip()
+    parent_id = request.args.get("parent_osm_id", "").strip()
+    level     = request.args.get("level", "place")
+
+    if not q:
+        return jsonify({"results": [], "level": level})
+
+    try:
+        params = {
+            "q": q,
+            "format": "json",
+            "limit": 12,
+            "addressdetails": 1,
+            "extratags": 1,
+            "namedetails": 1,
+        }
+        r = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params=params,
+            headers={"User-Agent": "WeatherDrift/2.0"},
+            timeout=10
+        )
+        items = r.json()
+        seen = set()
+        results = []
+        for item in items:
+            addr = item.get("address", {})
+            place_name = (
+                addr.get("hamlet") or addr.get("isolated_dwelling") or
+                addr.get("locality") or addr.get("neighbourhood") or
+                addr.get("suburb") or addr.get("village") or
+                addr.get("town") or addr.get("city_district") or
+                addr.get("city") or addr.get("municipality") or
+                addr.get("county") or item.get("name", "")
+            )
+            state        = addr.get("state") or addr.get("province") or ""
+            district     = addr.get("county") or addr.get("state_district") or ""
+            country_name = addr.get("country", "")
+            country_code = addr.get("country_code", "").upper()
+            place_type   = item.get("type", "place").title()
+
+            context_parts = []
+            if district and district.lower() != place_name.lower():
+                context_parts.append(district)
+            if state and state.lower() not in (place_name.lower(), district.lower()):
+                context_parts.append(state)
+            if country_name:
+                context_parts.append(country_name)
+
+            osm_id = str(item.get("osm_id", ""))
+            key = osm_id or f"{round(float(item['lat']),3)},{round(float(item['lon']),3)}"
+            if key in seen:
+                continue
+            seen.add(key)
+
+            results.append({
+                "name":         place_name,
+                "display":      place_name + (", " + ", ".join(context_parts) if context_parts else ""),
+                "osm_id":       osm_id,
+                "osm_type":     item.get("osm_type", ""),
+                "lat":          float(item["lat"]),
+                "lon":          float(item["lon"]),
+                "place_type":   place_type,
+                "country_code": country_code,
+                "country_name": country_name,
+                "state":        state,
+                "district":     district,
+            })
+        return jsonify({"results": results, "level": level})
+    except Exception as e:
+        return jsonify({"error": str(e), "results": []}), 500
+
+
+@app.route("/api/add-city", methods=["POST"])
+def add_city():
+    global _custom_cities
+    data         = request.get_json()
+    name         = data.get("name", "").strip()
+    lat          = data.get("lat")
+    lon          = data.get("lon")
+    country_code = (data.get("country_code", "CUSTOM") or "CUSTOM").upper().strip()
+    country_name = (data.get("country_name", "Custom") or "Custom").strip()
+    if not name or lat is None or lon is None:
+        return jsonify({"error": "Missing fields"}), 400
+    try:
+        lat = float(lat)
+        lon = float(lon)
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid coordinates"}), 400
+
+    _custom_cities[name] = {
+        "lat": lat, "lon": lon,
+        "country": country_code,
+        "country_name": country_name,
+    }
+    result = fetch_single_city(name, _custom_cities[name])
+    result["country_name"] = country_name
+    if _cache["weather"] is not None:
+        _cache["weather"] = [w for w in _cache["weather"] if w["city"] != name]
+        _cache["weather"].append(result)
+    else:
+        _cache["weather"] = [result]
+    return jsonify({"success": True, "city": name, "weather": result, "country_name": country_name})
+
+
+def _get_forecast_by_coords(lat, lon):
+    url = (f"https://api.open-meteo.com/v1/forecast"
+           f"?latitude={lat}&longitude={lon}"
+           f"&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+           f"&timezone=auto&forecast_days=7")
+    try:
+        data  = requests.get(url, timeout=10).json()
+        daily = data["daily"]
+        fc    = []
+        for i in range(7):
+            d = datetime.strptime(daily["time"][i], "%Y-%m-%d")
+            icon, cond = get_weather_icon(daily["weathercode"][i])
+            fc.append({
+                "day":  "Today" if i == 0 else d.strftime("%a"),
+                "icon": icon, "condition": cond,
+                "high": round(daily["temperature_2m_max"][i]),
+                "low":  round(daily["temperature_2m_min"][i]),
+                "rain": daily.get("precipitation_probability_max", [0] * 7)[i],
+            })
+        return fc
+    except:
+        return []
+
+
+@app.route("/api/preview")
+def api_preview():
+    """Fetch live weather for any lat/lon without adding to the city list."""
+    try:
+        lat     = float(request.args.get("lat", 0))
+        lon     = float(request.args.get("lon", 0))
+        name    = request.args.get("name", "Unknown").strip()
+        country = request.args.get("country", "").strip()
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid coordinates"}), 400
+
+    coords = {"lat": lat, "lon": lon, "country": "CUSTOM"}
+    result = fetch_single_city(name, coords)
+    result["country_name"] = country
+    result["forecast"]     = _get_forecast_by_coords(lat, lon)
+    return jsonify(result)
+
+
+@app.route("/api/test")
+def api_test():
+    try:
+        r = requests.get(
+            "https://api.open-meteo.com/v1/forecast?latitude=17.69&longitude=83.22&current_weather=true",
+            timeout=10)
+        d = r.json()
+        return jsonify({"status": "✅ API working", "temp": d["current_weather"]["temperature"]})
+    except Exception as e:
+        return jsonify({"status": "❌ API failed", "error": str(e)}), 500
+
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok", "cities": len(get_all_cities()), "cached": len(_cache["weather"] or [])})
+
+
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port)
     """
     Drill down through administrative hierarchy using Nominatim.
     level: 'country' | 'state' | 'district' | 'subdistrict' | 'mandal' | 'village'
@@ -2508,95 +2700,3 @@ def api_hierarchy():
         return jsonify({"results": results, "level": level})
     except Exception as e:
         return jsonify({"error": str(e), "results": []}), 500
-
-
-def add_city():
-    global _custom_cities
-    data = request.get_json()
-    name         = data.get("name","").strip()
-    lat          = data.get("lat")
-    lon          = data.get("lon")
-    country_code = data.get("country_code", "CUSTOM").upper().strip() or "CUSTOM"
-    country_name = data.get("country_name", "Custom").strip() or "Custom"
-    if not name or lat is None or lon is None:
-        return jsonify({"error":"Missing fields"}), 400
-    try:
-        lat = float(lat); lon = float(lon)
-        if not (-90<=lat<=90 and -180<=lon<=180):
-            raise ValueError
-    except:
-        return jsonify({"error":"Invalid coordinates"}), 400
-
-    _custom_cities[name] = {
-        "lat": lat, "lon": lon,
-        "country": country_code,
-        "country_name": country_name,
-    }
-    # Fetch weather immediately and inject into cache
-    result = fetch_single_city(name, _custom_cities[name])
-    # Attach country_name so sorting works
-    result["country_name"] = country_name
-    if _cache["weather"] is not None:
-        _cache["weather"] = [w for w in _cache["weather"] if w["city"] != name]
-        _cache["weather"].append(result)
-    else:
-        _cache["weather"] = [result]
-    return jsonify({"success": True, "city": name, "weather": result, "country_name": country_name})
-
-@app.route("/api/preview")
-def api_preview():
-    """Fetch live weather for any lat/lon without adding to the city list."""
-    try:
-        lat  = float(request.args.get("lat", 0))
-        lon  = float(request.args.get("lon", 0))
-        name = request.args.get("name", "Unknown").strip()
-        country = request.args.get("country", "").strip()
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid coordinates"}), 400
-
-    coords = {"lat": lat, "lon": lon, "country": "CUSTOM"}
-    result = fetch_single_city(name, coords)
-    result["country_name"] = country
-    # Also get 7-day forecast
-    forecast = get_forecast.__wrapped__(lat=lat, lon=lon) if hasattr(get_forecast, '__wrapped__') else _get_forecast_by_coords(lat, lon)
-    result["forecast"] = forecast
-    return jsonify(result)
-
-def _get_forecast_by_coords(lat, lon):
-    url = (f"https://api.open-meteo.com/v1/forecast"
-           f"?latitude={lat}&longitude={lon}"
-           f"&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
-           f"&timezone=auto&forecast_days=7")
-    try:
-        data = requests.get(url, timeout=10).json()
-        daily = data["daily"]
-        fc = []
-        for i in range(7):
-            d = datetime.strptime(daily["time"][i], "%Y-%m-%d")
-            icon, cond = get_weather_icon(daily["weathercode"][i])
-            fc.append({
-                "day":  "Today" if i == 0 else d.strftime("%a"),
-                "icon": icon, "condition": cond,
-                "high": round(daily["temperature_2m_max"][i]),
-                "low":  round(daily["temperature_2m_min"][i]),
-                "rain": daily.get("precipitation_probability_max", [0]*7)[i],
-            })
-        return fc
-    except:
-        return []
-def api_test():
-    try:
-        r=requests.get("https://api.open-meteo.com/v1/forecast?latitude=17.69&longitude=83.22&current_weather=true",timeout=10)
-        d=r.json()
-        return jsonify({"status":"✅ API working","temp":d["current_weather"]["temperature"]})
-    except Exception as e:
-        return jsonify({"status":"❌ API failed","error":str(e)}), 500
-
-@app.route("/health")
-def health():
-    return jsonify({"status":"ok","cities":len(get_all_cities()),"cached":len(_cache["weather"] or [])})
-
-if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, host="0.0.0.0", port=port)
