@@ -521,14 +521,24 @@ HTML_TEMPLATE = """
 
   .section-label {
     font-family: 'Space Mono', monospace;
-    font-size: 0.65rem;
-    letter-spacing: 4px;
+    font-size: 0.75rem;
+    letter-spacing: 3px;
     text-transform: uppercase;
-    color: var(--muted);
+    color: #222;
+    font-weight: 700;
     margin-bottom: 20px;
     display: flex;
     align-items: center;
     gap: 12px;
+  }
+  body.dark-mode .section-label { color: #ddd; }
+
+  .section-label .flag-emoji {
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+    font-size: 1.2rem;
+    font-style: normal;
+    letter-spacing: 0;
+    text-transform: none;
   }
 
   .section-label::after {
@@ -675,10 +685,11 @@ HTML_TEMPLATE = """
     z-index: 10;
   }
 
-  .city-card:hover .city-name { color: var(--paper); }
-  .city-card:hover .city-country { color: var(--muted); }
-  .city-card:hover .city-condition { color: #aaa; }
-  .city-card:hover .card-stat-label { color: var(--muted); }
+  .city-card:hover .city-name { color: #f2ede6 !important; }
+  .city-card:hover .city-country { color: #aaa !important; }
+  .city-card:hover .city-condition { color: #ccc !important; }
+  .city-card:hover .card-stat-label { color: #888 !important; }
+  .city-card:hover .card-stat-value { color: #f2ede6; }
 
   .city-header {
     display: flex;
@@ -691,19 +702,24 @@ HTML_TEMPLATE = """
     font-family: 'Bebas Neue', sans-serif;
     font-size: 1.8rem;
     letter-spacing: 2px;
-    color: var(--ink);
+    color: #0a0a0f;
     transition: color 0.2s;
   }
 
+  /* Dark mode: city name must stay dark since card bg is light-ish dark */
+  body.dark-mode .city-name { color: #f2ede6; }
+
   .city-country {
     font-family: 'Space Mono', monospace;
-    font-size: 0.6rem;
+    font-size: 0.65rem;
     letter-spacing: 2px;
-    color: var(--muted);
+    color: #555;
     text-transform: uppercase;
     margin-top: 2px;
     transition: color 0.2s;
+    font-weight: 600;
   }
+  body.dark-mode .city-country { color: #aaa; }
 
   .city-icon { font-size: 2.2rem; }
 
@@ -1047,9 +1063,9 @@ HTML_TEMPLATE = """
 
   <!-- CITY CARDS -->
   <section>
-    {% set countries = {"IN": "🇮🇳 India", "JP": "🇯🇵 Japan", "RU": "🇷🇺 Russia", "ZA": "🇿🇦 South Africa"} %}
-    {% for code, label in countries.items() %}
-    <div class="section-label" style="margin-top: 40px;">{{ label }}</div>
+    {% set countries = {"IN": ["🇮🇳", "India"], "JP": ["🇯🇵", "Japan"], "RU": ["🇷🇺", "Russia"], "ZA": ["🇿🇦", "South Africa"]} %}
+    {% for code, info in countries.items() %}
+    <div class="section-label" style="margin-top: 40px;"><span class="flag-emoji">{{ info[0] }}</span> {{ info[1] }}</div>
     <div class="city-grid" style="margin-bottom: 2px;">
       {% for w in weather_data if w.country == code %}
       <div class="city-card" onclick="selectCity('{{ w.city }}')" data-city="{{ w.city }}">
