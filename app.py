@@ -936,16 +936,18 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 
 <!-- CITY CARDS -->
 <section>
-  {% set countries = {"IN":["🇮🇳","India"],"JP":["🇯🇵","Japan"],"RU":["🇷🇺","Russia"],"ZA":["🇿🇦","South Africa"]} %}
-  {% for code, info in countries.items() %}
-  <div class="section-label" style="margin-top:40px;"><span class="flag-emoji">{{ info[0] }}</span> {{ info[1] }}</div>
-  <div class="city-grid">
-    {% for w in weather_data if w.country == code %}
-    <div class="city-card" onclick="selectCity('{{ w.city }}')" data-city="{{ w.city }}" data-temp-c="{{ w.temp }}">
+  {% for group in country_groups %}
+  <section data-country-name="{{ group.name }}">
+  <div class="section-label" style="margin-top:40px;">
+    <span class="flag-emoji">{{ group.flag }}</span> {{ group.name }}
+  </div>
+  <div class="city-grid" id="grid-{{ group.code }}">
+    {% for w in group.cities %}
+    <div class="city-card" onclick="selectCity('{{ w.city }}')" data-city="{{ w.city }}" data-temp-c="{{ w.temp }}" data-country="{{ w.country }}">
       <div class="city-header">
         <div>
           <div class="city-name">{{ w.city }}</div>
-          <div class="city-country">{{ info[1] }}</div>
+          <div class="city-country">{{ group.name }}</div>
         </div>
         <div class="city-icon">{{ w.icon }}</div>
       </div>
@@ -964,30 +966,8 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
     </div>
     {% endfor %}
   </div>
+  </section>
   {% endfor %}
-
-  <!-- CUSTOM CITIES -->
-  {% if custom_cities %}
-  <div class="section-label" style="margin-top:40px;"><span class="flag-emoji">🌍</span> Custom Cities</div>
-  <div class="city-grid">
-    {% for w in custom_cities %}
-    <div class="city-card" onclick="selectCity('{{ w.city }}')" data-city="{{ w.city }}" data-temp-c="{{ w.temp }}">
-      <div class="city-header">
-        <div><div class="city-name">{{ w.city }}</div><div class="city-country">Custom</div></div>
-        <div class="city-icon">{{ w.icon }}</div>
-      </div>
-      <div class="city-temp">{{ w.temp }}°</div>
-      <div class="city-condition">{{ w.condition }}</div>
-      <div class="card-stats">
-        <div><div class="card-stat-label">Humidity</div><div class="card-stat-value">{{ w.humidity }}%</div></div>
-        <div><div class="card-stat-label">Wind</div><div class="card-stat-value">{{ w.wind_speed }} km/h</div></div>
-        <div><div class="card-stat-label">UV</div><div class="card-stat-value">{{ w.uv_index }}</div></div>
-        <div><div class="card-stat-label">Pressure</div><div class="card-stat-value">{{ w.pressure }}</div></div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
 </section>
 
 <!-- ADD CUSTOM CITY -->
@@ -1634,6 +1614,9 @@ function selectGeoResult(idx) {
   document.getElementById('add-city-name').value = r.name;
   document.getElementById('add-city-lat').value  = r.lat.toFixed(4);
   document.getElementById('add-city-lon').value  = r.lon.toFixed(4);
+  // Store country info on hidden fields for submission
+  document.getElementById('add-city-name').dataset.countryCode = r.country_code || 'CUSTOM';
+  document.getElementById('add-city-name').dataset.countryName = r.country_name || 'Custom';
   document.getElementById('geocode-results').style.display='none';
   const btn = document.getElementById('add-city-btn');
   btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer';
@@ -1648,9 +1631,12 @@ document.addEventListener('click', e=>{
 
 // ── Add custom city ────────────────────────────────────────────────────────
 function addCustomCity() {
-  const name = document.getElementById('add-city-name').value.trim();
-  const lat  = parseFloat(document.getElementById('add-city-lat').value);
-  const lon  = parseFloat(document.getElementById('add-city-lon').value);
+  const nameEl = document.getElementById('add-city-name');
+  const name   = nameEl.value.trim();
+  const lat    = parseFloat(document.getElementById('add-city-lat').value);
+  const lon    = parseFloat(document.getElementById('add-city-lon').value);
+  const countryCode = nameEl.dataset.countryCode || 'CUSTOM';
+  const countryName = nameEl.dataset.countryName || 'Custom';
   const msg  = document.getElementById('add-msg');
   const btn  = document.getElementById('add-city-btn');
   if (!name || isNaN(lat) || isNaN(lon)) {
@@ -1663,20 +1649,20 @@ function addCustomCity() {
   fetch('/api/add-city',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name, lat, lon})
+    body:JSON.stringify({name, lat, lon, country_code: countryCode, country_name: countryName})
   })
   .then(r=>r.json())
   .then(d=>{
     if (d.success) {
-      msg.innerHTML=`✅ <b>${name}</b> added! Weather is live.`;
+      msg.innerHTML=`✅ <b>${name}</b> added under <b>${countryName}</b>!`;
       msg.style.color='#00c853';
       if (d.weather) {
         allCities.push(d.weather);
-        renderNewCityCard(d.weather);
+        renderNewCityCard(d.weather, countryCode, countryName);
         updateTicker(allCities);
         renderMapDots(allCities);
       }
-      document.getElementById('add-city-name').value='';
+      nameEl.value=''; nameEl.dataset.countryCode=''; nameEl.dataset.countryName='';
       document.getElementById('add-city-lat').value='';
       document.getElementById('add-city-lon').value='';
       btn.disabled=true; btn.style.opacity='.5'; btn.style.cursor='not-allowed';
@@ -1693,25 +1679,20 @@ function addCustomCity() {
   });
 }
 
-function renderNewCityCard(w) {
-  let section = document.getElementById('custom-cities-section');
-  if (!section) {
-    section = document.createElement('section');
-    section.id='custom-cities-section';
-    section.innerHTML=`
-      <div class="section-label" style="margin-top:40px;">
-        <span class="flag-emoji">🌍</span> Custom Cities
-      </div>
-      <div class="city-grid" id="custom-city-grid"></div>`;
-    document.querySelector('.add-city-section').before(section);
-  }
-  const grid = document.getElementById('custom-city-grid');
+function renderNewCityCard(w, countryCode, countryName) {
+  countryCode = countryCode || w.country || 'CUSTOM';
+  countryName = countryName || w.country_name || 'Custom';
+
+  // Build the card HTML
   const card = document.createElement('div');
-  card.className='city-card'; card.setAttribute('data-city',w.city); card.setAttribute('data-temp-c',w.temp);
-  card.onclick=()=>selectCity(w.city);
+  card.className='city-card';
+  card.setAttribute('data-city', w.city);
+  card.setAttribute('data-temp-c', w.temp);
+  card.setAttribute('data-country', countryCode);
+  card.onclick = ()=>selectCity(w.city);
   card.innerHTML=`
     <div class="city-header">
-      <div><div class="city-name">${w.city}</div><div class="city-country">Custom</div></div>
+      <div><div class="city-name">${w.city}</div><div class="city-country">${countryName}</div></div>
       <div class="city-icon">${w.icon}</div>
     </div>
     <div class="city-temp">${dispTemp(w.temp)}</div>
@@ -1726,7 +1707,43 @@ function renderNewCityCard(w) {
       <div><div class="card-stat-label">UV</div><div class="card-stat-value">${w.uv_index}</div></div>
       <div><div class="card-stat-label">Pressure</div><div class="card-stat-value">${w.pressure}</div></div>
     </div>`;
-  grid.appendChild(card);
+
+  // Find or create the country section grid
+  const gridId = 'grid-' + countryCode;
+  let grid = document.getElementById(gridId);
+
+  if (!grid) {
+    // Country section doesn't exist yet — create it and insert alphabetically
+    const section = document.createElement('section');
+    const flagMap = {IN:'🇮🇳',JP:'🇯🇵',RU:'🇷🇺',ZA:'🇿🇦'};
+    const flag = flagMap[countryCode] || '🌍';
+    section.setAttribute('data-country-name', countryName);
+    section.innerHTML=`
+      <div class="section-label" style="margin-top:40px;">
+        <span class="flag-emoji">${flag}</span> ${countryName}
+      </div>
+      <div class="city-grid" id="${gridId}"></div>`;
+
+    // Insert section alphabetically among existing country sections
+    const allSections = [...document.querySelectorAll('section[data-country-name]')];
+    const insertBefore = allSections.find(s =>
+      s.getAttribute('data-country-name').localeCompare(countryName) > 0
+    );
+    const addSection = document.querySelector('.add-city-section');
+    if (insertBefore) insertBefore.before(section);
+    else addSection.before(section);
+
+    grid = document.getElementById(gridId);
+  }
+
+  // Insert card alphabetically within the grid
+  const existingCards = [...grid.querySelectorAll('.city-card')];
+  const insertCardBefore = existingCards.find(c =>
+    c.getAttribute('data-city').localeCompare(w.city) > 0
+  );
+  if (insertCardBefore) insertCardBefore.before(card);
+  else grid.appendChild(card);
+
   if (typeof twemoji!=='undefined') twemoji.parse(card);
 }
 
@@ -1862,17 +1879,49 @@ console.log('WeatherDrift v2.0 ready ✅');
 @app.route("/")
 def index():
     weather = get_cached_weather()
-    featured = weather[0] if weather else {}
+    # Sort by country name then city name alphabetically
+    weather_sorted = sorted(weather, key=lambda w: (
+        w.get("country_name", w.get("country","")),
+        w.get("city","")
+    ))
+    featured = weather_sorted[0] if weather_sorted else {}
     forecast  = get_forecast(featured.get("city","Mumbai"))
-    all_c = get_all_cities()
-    custom_weather = [w for w in weather if w["city"] in _custom_cities]
+
+    # Build sorted country groups for template
+    # Each entry: (country_code, country_name, flag, [cities sorted])
+    country_meta = {
+        "IN":  ("India",        "🇮🇳"),
+        "JP":  ("Japan",        "🇯🇵"),
+        "RU":  ("Russia",       "🇷🇺"),
+        "ZA":  ("South Africa", "🇿🇦"),
+        "CUSTOM": ("Custom",    "🌍"),
+    }
+    # Gather all country codes present in data (including custom)
+    all_codes = sorted(set(w.get("country","CUSTOM") for w in weather_sorted),
+                       key=lambda c: country_meta.get(c, (c,""))[0])
+
+    country_groups = []
+    for code in all_codes:
+        meta = country_meta.get(code, (code, "🌍"))
+        cities = sorted(
+            [w for w in weather_sorted if w.get("country","CUSTOM") == code],
+            key=lambda w: w.get("city","")
+        )
+        if cities:
+            country_groups.append({
+                "code":  code,
+                "name":  meta[0],
+                "flag":  meta[1],
+                "cities": cities,
+            })
+
     return render_template_string(HTML_TEMPLATE,
-        weather_data=weather,
-        custom_cities=custom_weather,
+        weather_data=weather_sorted,
+        country_groups=country_groups,
         featured=featured,
         forecast=forecast,
         datetime=datetime.now().strftime("%A, %d %B %Y · %H:%M UTC"),
-        total_cities=len(weather),
+        total_cities=len(weather_sorted),
         last_updated=_cache["last_updated"],
     )
 
@@ -1919,14 +1968,16 @@ def geocode():
             addr = item.get("address", {})
             city_name = (addr.get("city") or addr.get("town") or
                          addr.get("village") or addr.get("county") or item.get("name",""))
-            country = addr.get("country", "")
-            display = f"{city_name}, {country}" if country else city_name
+            country_name = addr.get("country", "")
+            country_code = addr.get("country_code","").upper()
+            display = f"{city_name}, {country_name}" if country_name else city_name
             suggestions.append({
-                "display": display,
-                "name": city_name,
-                "lat": float(item["lat"]),
-                "lon": float(item["lon"]),
-                "country_code": addr.get("country_code","").upper(),
+                "display":      display,
+                "name":         city_name,
+                "lat":          float(item["lat"]),
+                "lon":          float(item["lon"]),
+                "country_code": country_code,
+                "country_name": country_name,
             })
         return jsonify({"results": suggestions})
     except Exception as e:
@@ -1936,9 +1987,11 @@ def geocode():
 def add_city():
     global _custom_cities
     data = request.get_json()
-    name = data.get("name","").strip()
-    lat  = data.get("lat")
-    lon  = data.get("lon")
+    name         = data.get("name","").strip()
+    lat          = data.get("lat")
+    lon          = data.get("lon")
+    country_code = data.get("country_code", "CUSTOM").upper().strip() or "CUSTOM"
+    country_name = data.get("country_name", "Custom").strip() or "Custom"
     if not name or lat is None or lon is None:
         return jsonify({"error":"Missing fields"}), 400
     try:
@@ -1947,16 +2000,22 @@ def add_city():
             raise ValueError
     except:
         return jsonify({"error":"Invalid coordinates"}), 400
-    _custom_cities[name] = {"lat":lat, "lon":lon, "country":"CUSTOM"}
+
+    _custom_cities[name] = {
+        "lat": lat, "lon": lon,
+        "country": country_code,
+        "country_name": country_name,
+    }
     # Fetch weather immediately and inject into cache
     result = fetch_single_city(name, _custom_cities[name])
+    # Attach country_name so sorting works
+    result["country_name"] = country_name
     if _cache["weather"] is not None:
-        # Remove old entry for same city if exists, then append fresh one
         _cache["weather"] = [w for w in _cache["weather"] if w["city"] != name]
         _cache["weather"].append(result)
     else:
         _cache["weather"] = [result]
-    return jsonify({"success": True, "city": name, "weather": result})
+    return jsonify({"success": True, "city": name, "weather": result, "country_name": country_name})
 
 @app.route("/api/test")
 def api_test():
