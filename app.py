@@ -993,22 +993,36 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 <!-- ADD CUSTOM CITY -->
 <section class="add-city-section" style="margin-top:60px;">
   <div class="section-label">➕ Add Custom City</div>
-  <div class="add-city-form">
-    <div class="form-group">
-      <label class="form-label">City Name</label>
-      <input class="form-input" id="add-city-name" placeholder="e.g. London" type="text" style="width:180px;">
+  <div style="background:var(--card-bg);border:2px solid var(--border);padding:30px;">
+    <div style="font-family:'Space Mono',monospace;font-size:.68rem;color:var(--muted);margin-bottom:16px;letter-spacing:1px;">
+      Type any city name in the world — we'll find it automatically.
     </div>
-    <div class="form-group">
-      <label class="form-label">Latitude</label>
-      <input class="form-input" id="add-city-lat" placeholder="e.g. 51.51" type="number" step="0.01" style="width:130px;">
+    <div class="add-city-form">
+      <div class="form-group" style="flex:1;min-width:220px;position:relative;">
+        <label class="form-label">City Name</label>
+        <input class="form-input" id="add-city-name" placeholder="e.g. London, New York, Paris..."
+          type="text" autocomplete="off" oninput="geocodeSearch(this.value)" style="width:100%;">
+        <div id="geocode-results" style="
+          display:none;position:absolute;top:100%;left:0;right:0;
+          background:#1a1a22;border:1px solid rgba(255,255,255,.12);
+          border-radius:4px;z-index:300;max-height:220px;overflow-y:auto;margin-top:2px;">
+        </div>
+      </div>
+      <div class="form-group" style="min-width:130px;">
+        <label class="form-label">Lat (auto)</label>
+        <input class="form-input" id="add-city-lat" placeholder="Auto-filled" type="text" readonly
+          style="width:130px;background:rgba(0,0,0,.1);color:var(--muted);cursor:not-allowed;">
+      </div>
+      <div class="form-group" style="min-width:130px;">
+        <label class="form-label">Lon (auto)</label>
+        <input class="form-input" id="add-city-lon" placeholder="Auto-filled" type="text" readonly
+          style="width:130px;background:rgba(0,0,0,.1);color:var(--muted);cursor:not-allowed;">
+      </div>
+      <button class="btn-add" id="add-city-btn" onclick="addCustomCity()" disabled
+        style="opacity:.5;cursor:not-allowed;">+ Add City</button>
     </div>
-    <div class="form-group">
-      <label class="form-label">Longitude</label>
-      <input class="form-input" id="add-city-lon" placeholder="e.g. -0.12" type="number" step="0.01" style="width:130px;">
-    </div>
-    <button class="btn-add" onclick="addCustomCity()">+ Add City</button>
+    <div id="add-msg" class="add-msg" style="display:none;margin-top:12px;"></div>
   </div>
-  <div id="add-msg" class="add-msg" style="display:none;"></div>
 </section>
 
 </main>
@@ -1577,31 +1591,142 @@ function loadCompare() {
   });
 }
 
+// ── Geocode search (OpenStreetMap Nominatim) ──────────────────────────────
+let geocodeTimer = null;
+let _geoResults  = [];
+
+function geocodeSearch(q) {
+  clearTimeout(geocodeTimer);
+  const box = document.getElementById('geocode-results');
+  const btn = document.getElementById('add-city-btn');
+  btn.disabled=true; btn.style.opacity='.5'; btn.style.cursor='not-allowed';
+  document.getElementById('add-city-lat').value='';
+  document.getElementById('add-city-lon').value='';
+  if (!q || q.length < 2) { box.style.display='none'; return; }
+  box.style.display='block';
+  box.innerHTML='<div style="padding:12px 14px;font-family:monospace;font-size:.68rem;color:#666;">Searching...</div>';
+  geocodeTimer = setTimeout(()=>{
+    fetch('/api/geocode?q='+encodeURIComponent(q))
+      .then(r=>r.json())
+      .then(data=>{
+        _geoResults = data.results || [];
+        if (!_geoResults.length) {
+          box.innerHTML='<div style="padding:12px 14px;font-family:monospace;font-size:.68rem;color:#888;">No results. Try a different spelling.</div>';
+          return;
+        }
+        box.innerHTML = _geoResults.map((r,i)=>`
+          <div onclick="selectGeoResult(${i})" style="padding:11px 14px;font-family:'Space Mono',monospace;font-size:.68rem;
+            color:#ccc;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);
+            display:flex;justify-content:space-between;align-items:center;"
+            onmouseover="this.style.background='rgba(232,68,26,.15)'"
+            onmouseout="this.style.background='transparent'">
+            <span>📍 ${r.display}</span>
+            <span style="color:#555;font-size:.58rem;">${r.lat.toFixed(2)}, ${r.lon.toFixed(2)}</span>
+          </div>`).join('');
+      })
+      .catch(()=>{ box.innerHTML='<div style="padding:12px 14px;font-family:monospace;font-size:.68rem;color:#f44336;">Search failed.</div>'; });
+  }, 420);
+}
+
+function selectGeoResult(idx) {
+  const r = _geoResults[idx]; if (!r) return;
+  document.getElementById('add-city-name').value = r.name;
+  document.getElementById('add-city-lat').value  = r.lat.toFixed(4);
+  document.getElementById('add-city-lon').value  = r.lon.toFixed(4);
+  document.getElementById('geocode-results').style.display='none';
+  const btn = document.getElementById('add-city-btn');
+  btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer';
+}
+
+document.addEventListener('click', e=>{
+  if (!e.target.closest('.add-city-section')) {
+    const b=document.getElementById('geocode-results');
+    if (b) b.style.display='none';
+  }
+});
+
 // ── Add custom city ────────────────────────────────────────────────────────
 function addCustomCity() {
   const name = document.getElementById('add-city-name').value.trim();
   const lat  = parseFloat(document.getElementById('add-city-lat').value);
   const lon  = parseFloat(document.getElementById('add-city-lon').value);
   const msg  = document.getElementById('add-msg');
+  const btn  = document.getElementById('add-city-btn');
   if (!name || isNaN(lat) || isNaN(lon)) {
-    msg.textContent='⚠️ Please fill all fields correctly.'; msg.style.display='block'; return;
+    msg.innerHTML='⚠️ Please select a city from the dropdown first.';
+    msg.style.color='#ff9800'; msg.style.display='block'; return;
   }
-  msg.textContent='Adding city...'; msg.style.display='block';
-  fetch('/api/add-city', {
+  msg.innerHTML=`⏳ Fetching weather for <b>${name}</b>...`;
+  msg.style.color='var(--accent)'; msg.style.display='block';
+  btn.disabled=true; btn.style.opacity='.5';
+  fetch('/api/add-city',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name, lat, lon})
+    body:JSON.stringify({name, lat, lon})
   })
   .then(r=>r.json())
-  .then(d => {
-    msg.textContent = d.success ? `✅ ${name} added! Refresh to see it.` : '❌ '+d.error;
+  .then(d=>{
     if (d.success) {
+      msg.innerHTML=`✅ <b>${name}</b> added! Weather is live.`;
+      msg.style.color='#00c853';
+      if (d.weather) {
+        allCities.push(d.weather);
+        renderNewCityCard(d.weather);
+        updateTicker(allCities);
+        renderMapDots(allCities);
+      }
       document.getElementById('add-city-name').value='';
       document.getElementById('add-city-lat').value='';
       document.getElementById('add-city-lon').value='';
+      btn.disabled=true; btn.style.opacity='.5'; btn.style.cursor='not-allowed';
+    } else {
+      msg.textContent='❌ '+(d.error||'Failed to add city.');
+      msg.style.color='#f44336';
+      btn.disabled=false; btn.style.opacity='1';
     }
   })
-  .catch(()=>{ msg.textContent='❌ Failed to add city.'; });
+  .catch(()=>{
+    msg.textContent='❌ Network error. Try again.';
+    msg.style.color='#f44336';
+    btn.disabled=false; btn.style.opacity='1';
+  });
+}
+
+function renderNewCityCard(w) {
+  let section = document.getElementById('custom-cities-section');
+  if (!section) {
+    section = document.createElement('section');
+    section.id='custom-cities-section';
+    section.innerHTML=`
+      <div class="section-label" style="margin-top:40px;">
+        <span class="flag-emoji">🌍</span> Custom Cities
+      </div>
+      <div class="city-grid" id="custom-city-grid"></div>`;
+    document.querySelector('.add-city-section').before(section);
+  }
+  const grid = document.getElementById('custom-city-grid');
+  const card = document.createElement('div');
+  card.className='city-card'; card.setAttribute('data-city',w.city); card.setAttribute('data-temp-c',w.temp);
+  card.onclick=()=>selectCity(w.city);
+  card.innerHTML=`
+    <div class="city-header">
+      <div><div class="city-name">${w.city}</div><div class="city-country">Custom</div></div>
+      <div class="city-icon">${w.icon}</div>
+    </div>
+    <div class="city-temp">${dispTemp(w.temp)}</div>
+    <div class="city-condition">${w.condition}</div>
+    <div class="city-badges">
+      <span class="badge badge-aqi">AQI ${w.aqi||'—'}</span>
+      <span class="badge badge-rain">💧${w.rain_prob||0}%</span>
+    </div>
+    <div class="card-stats">
+      <div><div class="card-stat-label">Humidity</div><div class="card-stat-value">${w.humidity}%</div></div>
+      <div><div class="card-stat-label">Wind</div><div class="card-stat-value">${w.wind_speed} km/h</div></div>
+      <div><div class="card-stat-label">UV</div><div class="card-stat-value">${w.uv_index}</div></div>
+      <div><div class="card-stat-label">Pressure</div><div class="card-stat-value">${w.pressure}</div></div>
+    </div>`;
+  grid.appendChild(card);
+  if (typeof twemoji!=='undefined') twemoji.parse(card);
 }
 
 // ── Share ──────────────────────────────────────────────────────────────────
@@ -1740,6 +1865,38 @@ def city_api(city_name):
     result = fetch_single_city(city_name, coords)
     return jsonify({**result, "forecast": forecast})
 
+@app.route("/api/geocode")
+def geocode():
+    """Search city name via OpenStreetMap Nominatim — returns lat/lon + display name."""
+    q = request.args.get("q","").strip()
+    if not q:
+        return jsonify({"error":"No query"}), 400
+    try:
+        r = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": q, "format": "json", "limit": 5, "addressdetails": 1},
+            headers={"User-Agent": "WeatherDrift/2.0"},
+            timeout=10
+        )
+        results = r.json()
+        suggestions = []
+        for item in results:
+            addr = item.get("address", {})
+            city_name = (addr.get("city") or addr.get("town") or
+                         addr.get("village") or addr.get("county") or item.get("name",""))
+            country = addr.get("country", "")
+            display = f"{city_name}, {country}" if country else city_name
+            suggestions.append({
+                "display": display,
+                "name": city_name,
+                "lat": float(item["lat"]),
+                "lon": float(item["lon"]),
+                "country_code": addr.get("country_code","").upper(),
+            })
+        return jsonify({"results": suggestions})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/add-city", methods=["POST"])
 def add_city():
     global _custom_cities
@@ -1755,11 +1912,16 @@ def add_city():
             raise ValueError
     except:
         return jsonify({"error":"Invalid coordinates"}), 400
-    _custom_cities[name] = {"lat":lat,"lon":lon,"country":"CUSTOM"}
-    # Fetch and add to cache immediately
+    _custom_cities[name] = {"lat":lat, "lon":lon, "country":"CUSTOM"}
+    # Fetch weather immediately and inject into cache
     result = fetch_single_city(name, _custom_cities[name])
-    if _cache["weather"]: _cache["weather"].append(result)
-    return jsonify({"success":True,"city":name})
+    if _cache["weather"] is not None:
+        # Remove old entry for same city if exists, then append fresh one
+        _cache["weather"] = [w for w in _cache["weather"] if w["city"] != name]
+        _cache["weather"].append(result)
+    else:
+        _cache["weather"] = [result]
+    return jsonify({"success": True, "city": name, "weather": result})
 
 @app.route("/api/test")
 def api_test():
