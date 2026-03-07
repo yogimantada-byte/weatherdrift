@@ -586,13 +586,14 @@ HTML_TEMPLATE = """
     letter-spacing: 4px;
     line-height: 1;
     margin-bottom: 8px;
+    color: #f2ede6;
   }
 
   .featured-country {
     font-family: 'Space Mono', monospace;
     font-size: 0.75rem;
     letter-spacing: 3px;
-    color: var(--muted);
+    color: #aaaaaa;
     text-transform: uppercase;
     margin-bottom: 24px;
   }
@@ -600,7 +601,7 @@ HTML_TEMPLATE = """
   .featured-condition {
     font-size: 1.1rem;
     font-weight: 300;
-    color: #ccc;
+    color: #dddddd;
   }
 
   .featured-temp {
@@ -1036,7 +1037,7 @@ HTML_TEMPLATE = """
       <div>
         <div class="featured-icon" id="feat-icon">{{ featured.icon }}</div>
         <div class="featured-city" id="feat-city">{{ featured.city }}</div>
-        <div class="featured-country" id="feat-country">{{ featured.country }} · Updated just now</div>
+        <div class="featured-country" id="feat-country">{% set cn = {"IN":"🇮🇳 India","JP":"🇯🇵 Japan","RU":"🇷🇺 Russia","ZA":"🇿🇦 South Africa"} %}{{ cn.get(featured.country, featured.country) }} · Updated just now</div>
         <div class="featured-condition" id="feat-condition">{{ featured.condition }} — Feels like {{ featured.feels_like }}°C</div>
         <div class="stats-row">
           <div class="stat">
@@ -1235,12 +1236,15 @@ document.addEventListener('click', e => {
 });
 
 // ── Update featured panel ────────────────────────────────────────────────
+const COUNTRY_NAMES = { IN:'🇮🇳 India', JP:'🇯🇵 Japan', RU:'🇷🇺 Russia', ZA:'🇿🇦 South Africa' };
+
 function updateFeaturedPanel(d) {
   if (!d || d.error) return;
   rawTemp['feat-temp'] = d.temp;
+  const countryLabel = COUNTRY_NAMES[d.country] || d.country || '—';
   document.getElementById('feat-icon').textContent       = safe(d.icon);
   document.getElementById('feat-city').textContent       = safe(d.city);
-  document.getElementById('feat-country').textContent    = safe(d.country) + ' · Updated just now';
+  document.getElementById('feat-country').textContent    = countryLabel + ' · Updated just now';
   document.getElementById('feat-condition').textContent  = safe(d.condition) + ' — Feels like ' + (isCelsius ? safe(d.feels_like,'°C') : toF(d.feels_like)+'°F');
   document.getElementById('feat-temp').textContent       = displayTemp(d.temp);
   document.getElementById('feat-unit').textContent       = unitLabel();
