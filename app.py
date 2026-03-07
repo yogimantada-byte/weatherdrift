@@ -621,7 +621,10 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
     <div>
       <div class="featured-icon" id="feat-icon">{{ featured.icon }}</div>
       <div class="featured-city" id="feat-city">{{ featured.city }}</div>
-      <div class="featured-country" id="feat-country">{% set cn = {"IN":"🇮🇳 India","JP":"🇯🇵 Japan","RU":"🇷🇺 Russia","ZA":"🇿🇦 South Africa"} %}{{ cn.get(featured.country, featured.country) }} · Updated just now</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="featured-country" id="feat-country">{% set cn = {"IN":"🇮🇳 India","JP":"🇯🇵 Japan","RU":"🇷🇺 Russia","ZA":"🇿🇦 South Africa"} %}{{ cn.get(featured.country, featured.country) }} · Updated just now</div>
+        <span id="preview-badge" style="display:none;align-items:center;gap:5px;background:rgba(232,68,26,.2);border:1px solid var(--accent);color:var(--accent);font-family:'Space Mono',monospace;font-size:.55rem;padding:2px 8px;letter-spacing:1px;border-radius:2px;">👁 PREVIEW ONLY</span>
+      </div>
       <div class="featured-condition" id="feat-condition">{{ featured.condition }} — Feels like {{ featured.feels_like }}°C</div>
 
       <!-- AQI -->
@@ -1072,17 +1075,89 @@ function updateClocks() {
 updateClocks(); setInterval(updateClocks, 1000);
 
 // ── Search ─────────────────────────────────────────────────────────────────
+// ── Search bar — global city search via Nominatim ─────────────────────────
+let _searchTimer  = null;
+let _searchResults = [];   // [{city, country_name, lat, lon, display}]
+
 function handleSearch(q) {
+  clearTimeout(_searchTimer);
   const box = document.getElementById('search-results');
   if (!q.trim()) { box.style.display='none'; return; }
-  const matches = allCities.filter(c=>c.city.toLowerCase().includes(q.toLowerCase())).slice(0,8);
-  if (!matches.length) { box.style.display='none'; return; }
-  box.innerHTML = matches.map(c=>`
-    <div class="search-result-item" onclick="selectCity('${c.city}');document.getElementById('city-search').value='';document.getElementById('search-results').style.display='none';">
-      <span>${c.city}</span><span>${c.temp!==undefined?dispTemp(c.temp):''}</span>
-    </div>`).join('');
-  box.style.display='block';
+
+  // First show instant matches from already-loaded cities
+  const local = allCities.filter(c => c.city.toLowerCase().includes(q.toLowerCase())).slice(0, 4);
+  if (local.length) {
+    box.innerHTML = local.map(c=>`
+      <div class="search-result-item" onclick="selectCity('${c.city}');document.getElementById('city-search').value='';document.getElementById('search-results').style.display='none';">
+        <span>⭐ ${c.city}</span><span style="color:#aaa;font-size:.62rem;">${c.temp!==undefined?dispTemp(c.temp):''}</span>
+      </div>`).join('') +
+      `<div style="padding:6px 14px;font-family:monospace;font-size:.6rem;color:#555;border-top:1px solid rgba(255,255,255,.05);">Searching worldwide...</div>`;
+    box.style.display='block';
+  } else {
+    box.innerHTML=`<div style="padding:10px 14px;font-family:monospace;font-size:.65rem;color:#666;">Searching...</div>`;
+    box.style.display='block';
+  }
+
+  // Then fire Nominatim after short debounce
+  _searchTimer = setTimeout(()=>{
+    fetch('/api/geocode?q='+encodeURIComponent(q))
+      .then(r=>r.json())
+      .then(data=>{
+        _searchResults = data.results || [];
+        const localHtml = local.map(c=>`
+          <div class="search-result-item" onclick="selectCity('${c.city}');document.getElementById('city-search').value='';document.getElementById('search-results').style.display='none';">
+            <span>⭐ ${c.city}</span><span style="color:#aaa;font-size:.62rem;">${c.temp!==undefined?dispTemp(c.temp):''}</span>
+          </div>`).join('');
+
+        const globalHtml = _searchResults
+          .filter(r => !local.some(l => l.city.toLowerCase()===r.name.toLowerCase()))
+          .slice(0, 6)
+          .map((r,i)=>`
+            <div class="search-result-item" onclick="searchSelectCity(${i})">
+              <span>🌍 ${r.display}</span>
+              <span style="color:#e8441a;font-size:.6rem;font-weight:700;">PREVIEW</span>
+            </div>`).join('');
+
+        if (!localHtml && !globalHtml) {
+          box.innerHTML=`<div style="padding:10px 14px;font-family:monospace;font-size:.65rem;color:#666;">No results found.</div>`;
+        } else {
+          const sep = localHtml && globalHtml
+            ? `<div style="padding:4px 14px;font-family:monospace;font-size:.58rem;color:#444;background:rgba(255,255,255,.03);letter-spacing:1px;">— WORLDWIDE —</div>`
+            : '';
+          box.innerHTML = localHtml + sep + globalHtml;
+        }
+        box.style.display='block';
+      })
+      .catch(()=>{});
+  }, 380);
 }
+
+// Called when user clicks a worldwide (non-list) search result
+function searchSelectCity(idx) {
+  const r = _searchResults[idx]; if (!r) return;
+  document.getElementById('city-search').value = '';
+  document.getElementById('search-results').style.display = 'none';
+  document.getElementById('featured-loading').style.display = 'inline';
+  document.querySelector('.featured-section').scrollIntoView({behavior:'smooth', block:'start'});
+
+  // Deselect any card
+  document.querySelectorAll('.city-card').forEach(c=>c.classList.remove('selected'));
+  currentCity = null;   // not in list — don't track as currentCity for auto-refresh
+
+  // Fetch live weather directly from Open-Meteo via backend
+  fetch(`/api/preview?lat=${r.lat}&lon=${r.lon}&name=${encodeURIComponent(r.name)}&country=${encodeURIComponent(r.country_name||'')}`)
+    .then(res=>res.json())
+    .then(d=>{
+      updateFeaturedPanel(d);
+      updateForecast(d.city, d.forecast||[]);
+      document.getElementById('featured-loading').style.display='none';
+      // Show a subtle "preview" badge on featured card
+      const badge = document.getElementById('preview-badge');
+      if (badge) badge.style.display='inline-flex';
+    })
+    .catch(()=>{ document.getElementById('featured-loading').style.display='none'; });
+}
+
 document.addEventListener('click',e=>{ if(!e.target.closest('.search-wrap')) document.getElementById('search-results').style.display='none'; });
 
 // ── Animated weather background ───────────────────────────────────────────
@@ -1486,6 +1561,8 @@ function selectCity(name) {
   document.querySelectorAll('.city-card').forEach(c=>c.classList.remove('selected'));
   const sel = document.querySelector(`.city-card[data-city="${name}"]`);
   if (sel) sel.classList.add('selected');
+  const badge = document.getElementById('preview-badge');
+  if (badge) badge.style.display='none';
   document.getElementById('featured-loading').style.display='inline';
   document.querySelector('.featured-section').scrollIntoView({behavior:'smooth',block:'start'});
   fetch(`/api/city/${encodeURIComponent(name)}`)
@@ -2017,7 +2094,47 @@ def add_city():
         _cache["weather"] = [result]
     return jsonify({"success": True, "city": name, "weather": result, "country_name": country_name})
 
-@app.route("/api/test")
+@app.route("/api/preview")
+def api_preview():
+    """Fetch live weather for any lat/lon without adding to the city list."""
+    try:
+        lat  = float(request.args.get("lat", 0))
+        lon  = float(request.args.get("lon", 0))
+        name = request.args.get("name", "Unknown").strip()
+        country = request.args.get("country", "").strip()
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid coordinates"}), 400
+
+    coords = {"lat": lat, "lon": lon, "country": "CUSTOM"}
+    result = fetch_single_city(name, coords)
+    result["country_name"] = country
+    # Also get 7-day forecast
+    forecast = get_forecast.__wrapped__(lat=lat, lon=lon) if hasattr(get_forecast, '__wrapped__') else _get_forecast_by_coords(lat, lon)
+    result["forecast"] = forecast
+    return jsonify(result)
+
+def _get_forecast_by_coords(lat, lon):
+    url = (f"https://api.open-meteo.com/v1/forecast"
+           f"?latitude={lat}&longitude={lon}"
+           f"&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+           f"&timezone=auto&forecast_days=7")
+    try:
+        data = requests.get(url, timeout=10).json()
+        daily = data["daily"]
+        fc = []
+        for i in range(7):
+            d = datetime.strptime(daily["time"][i], "%Y-%m-%d")
+            icon, cond = get_weather_icon(daily["weathercode"][i])
+            fc.append({
+                "day":  "Today" if i == 0 else d.strftime("%a"),
+                "icon": icon, "condition": cond,
+                "high": round(daily["temperature_2m_max"][i]),
+                "low":  round(daily["temperature_2m_min"][i]),
+                "rain": daily.get("precipitation_probability_max", [0]*7)[i],
+            })
+        return fc
+    except:
+        return []
 def api_test():
     try:
         r=requests.get("https://api.open-meteo.com/v1/forecast?latitude=17.69&longitude=83.22&current_weather=true",timeout=10)
