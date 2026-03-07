@@ -1112,11 +1112,18 @@ function handleSearch(q) {
         const globalHtml = _searchResults
           .filter(r => !local.some(l => l.city.toLowerCase()===r.name.toLowerCase()))
           .slice(0, 6)
-          .map((r,i)=>`
-            <div class="search-result-item" onclick="searchSelectCity(${i})">
+          .map((r,i)=>{
+            const typeColor = {
+              'City':'#e8441a','Town':'#ff9800','Village':'#4caf50',
+              'Hamlet':'#66bb6a','Suburb':'#2196f3','Neighbourhood':'#9c27b0',
+              'Locality':'#00bcd4','Municipality':'#ff9800'
+            }[r.place_type] || '#888';
+            const typeLabel = r.place_type || 'Place';
+            return `<div class="search-result-item" onclick="searchSelectCity(${i})">
               <span>🌍 ${r.display}</span>
-              <span style="color:#e8441a;font-size:.6rem;font-weight:700;">PREVIEW</span>
-            </div>`).join('');
+              <span style="color:${typeColor};font-size:.58rem;font-weight:700;white-space:nowrap;">${typeLabel} · PREVIEW</span>
+            </div>`;
+          }).join('');
 
         if (!localHtml && !globalHtml) {
           box.innerHTML=`<div style="padding:10px 14px;font-family:monospace;font-size:.65rem;color:#666;">No results found.</div>`;
@@ -1679,7 +1686,7 @@ function geocodeSearch(q) {
             onmouseover="this.style.background='rgba(232,68,26,.15)'"
             onmouseout="this.style.background='transparent'">
             <span>📍 ${r.display}</span>
-            <span style="color:#555;font-size:.58rem;">${r.lat.toFixed(2)}, ${r.lon.toFixed(2)}</span>
+            <span style="color:#555;font-size:.58rem;">${r.place_type||'Place'} · ${r.lat.toFixed(2)}, ${r.lon.toFixed(2)}</span>
           </div>`).join('');
       })
       .catch(()=>{ box.innerHTML='<div style="padding:12px 14px;font-family:monospace;font-size:.68rem;color:#f44336;">Search failed.</div>'; });
@@ -2028,34 +2035,86 @@ def city_api(city_name):
 
 @app.route("/api/geocode")
 def geocode():
-    """Search city name via OpenStreetMap Nominatim — returns lat/lon + display name."""
+    """Search any named place via OpenStreetMap Nominatim — cities, towns, villages, hamlets, rural areas."""
     q = request.args.get("q","").strip()
     if not q:
         return jsonify({"error":"No query"}), 400
     try:
         r = requests.get(
             "https://nominatim.openstreetmap.org/search",
-            params={"q": q, "format": "json", "limit": 5, "addressdetails": 1},
-            headers={"User-Agent": "WeatherDrift/2.0"},
+            params={
+                "q": q,
+                "format": "json",
+                "limit": 8,
+                "addressdetails": 1,
+                "extratags": 1,       # population, place type etc.
+                "namedetails": 1,     # local language names
+            },
+            headers={"User-Agent": "WeatherDrift/2.0 (weather app)"},
             timeout=10
         )
         results = r.json()
         suggestions = []
+        seen = set()  # deduplicate by (lat,lon) rounded to 2 dp
+
         for item in results:
             addr = item.get("address", {})
-            city_name = (addr.get("city") or addr.get("town") or
-                         addr.get("village") or addr.get("county") or item.get("name",""))
+
+            # ── Resolve the best place name (most specific → least specific) ──
+            place_name = (
+                addr.get("hamlet")       or   # tiny settlement
+                addr.get("isolated_dwelling") or
+                addr.get("locality")     or
+                addr.get("neighbourhood")or
+                addr.get("suburb")       or
+                addr.get("village")      or
+                addr.get("town")         or
+                addr.get("city_district")or
+                addr.get("city")         or
+                addr.get("municipality") or
+                addr.get("county")       or
+                addr.get("region")       or
+                item.get("name", "")
+            )
+
+            # ── Build context string (state/district for disambiguation) ──
+            state    = addr.get("state") or addr.get("province") or addr.get("region") or ""
+            district = addr.get("county") or addr.get("state_district") or ""
             country_name = addr.get("country", "")
-            country_code = addr.get("country_code","").upper()
-            display = f"{city_name}, {country_name}" if country_name else city_name
+            country_code = addr.get("country_code", "").upper()
+
+            # Smart display: Village, District, State, Country
+            context_parts = []
+            if district and district.lower() != place_name.lower():
+                context_parts.append(district)
+            if state and state.lower() != place_name.lower() and state != district:
+                context_parts.append(state)
+            if country_name:
+                context_parts.append(country_name)
+            context = ", ".join(context_parts)
+            display = f"{place_name}, {context}" if context else place_name
+
+            # Place type label (City / Town / Village / Hamlet / etc.)
+            osm_type  = item.get("type", "")
+            place_type = item.get("addresstype", osm_type).replace("_"," ").title()
+
+            # Deduplicate
+            key = (round(float(item["lat"]),2), round(float(item["lon"]),2))
+            if key in seen:
+                continue
+            seen.add(key)
+
             suggestions.append({
                 "display":      display,
-                "name":         city_name,
+                "name":         place_name,
+                "place_type":   place_type,   # "Village", "Hamlet", "City" etc.
                 "lat":          float(item["lat"]),
                 "lon":          float(item["lon"]),
                 "country_code": country_code,
                 "country_name": country_name,
+                "state":        state,
             })
+
         return jsonify({"results": suggestions})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
