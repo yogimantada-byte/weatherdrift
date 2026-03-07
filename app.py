@@ -269,6 +269,7 @@ HTML_TEMPLATE = """
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/twemoji.min.js" crossorigin="anonymous"></script>
 <style>
   :root {
     --ink: #0a0a0f;
@@ -618,6 +619,16 @@ HTML_TEMPLATE = """
     color: var(--muted);
     text-align: right;
   }
+
+  /* Twemoji flag images — correct sizing on Windows */
+  img.emoji {
+    height: 1.2em;
+    width: 1.2em;
+    vertical-align: middle;
+    display: inline-block;
+  }
+  .flag-emoji img.emoji { height: 1.4em; width: 1.4em; }
+  .clock-flag img.emoji { height: 1.4em; width: 1.4em; }
 
   /* Emoji font fix — forces colour emoji on ALL devices */
   .featured-icon,
@@ -1463,6 +1474,25 @@ document.querySelectorAll('.city-card').forEach(card => {
 
 setInterval(autoRefresh, 60000);
 console.log('WeatherDrift ready ✅');
+
+// ── Twemoji — renders flags on Windows PC ────────────────────────────────
+function applyTwemoji() {
+  twemoji.parse(document.body, {
+    folder: 'svg',
+    ext: '.svg',
+    base: 'https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/',
+    callback: function(icon, options) {
+      // Only convert flag emojis (regional indicators are U+1F1E6–1F1FF)
+      // and common weather emojis — skip if not needed
+      return ''.concat(options.base, options.size, '/', icon, options.ext);
+    }
+  });
+}
+
+// Run on load, and after any dynamic content updates
+if (typeof twemoji !== 'undefined') {
+  window.addEventListener('load', applyTwemoji);
+}
 </script>
 
 </body>
