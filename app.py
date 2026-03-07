@@ -1232,7 +1232,8 @@ function setChartMode(mode, btn) {
   chartMode = mode;
   document.querySelectorAll('.chart-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  if (histData[currentCity||'']) drawChart(histData[currentCity]);
+  const city = currentCity || Object.keys(histData)[0];
+  if (city && histData[city]) drawChart(histData[city]);
 }
 
 function updateHistoryChart(city, weatherObj) {
@@ -1784,23 +1785,57 @@ function autoRefresh() {
     updateTicker(data.weather);
     const l=document.getElementById('last-updated-label');
     if(l) l.textContent='Last updated: '+data.last_updated;
+
+    // Always record history for ALL cities so switching tabs shows real data
+    data.weather.forEach(w => {
+      if (!histData[w.city]) histData[w.city] = [];
+      histData[w.city].push({
+        t: new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
+        temp: w.temp,
+        humidity: w.humidity ?? 65,
+        wind: w.wind_speed ?? 12,
+      });
+      if (histData[w.city].length > 20) histData[w.city].shift();
+    });
+
+    // Update featured panel + redraw chart for current city
     if (currentCity) {
-      const w=data.weather.find(x=>x.city===currentCity);
-      if(w) updateFeaturedPanel(w);
+      const w = data.weather.find(x=>x.city===currentCity);
+      if (w) {
+        updateFeaturedPanel(w);
+        drawChart(histData[currentCity]);
+      }
     }
   }).catch(()=>{});
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.querySelectorAll('.city-card').forEach(card=>{
-  const city=card.dataset.city;
-  const rawC=parseFloat(card.dataset.tempC);
-  if(city && !isNaN(rawC)) allCities.push({city, country:card.querySelector('.city-country')?.textContent||'', temp:rawC});
+  const city  = card.dataset.city;
+  const rawC  = parseFloat(card.dataset.tempC);
+  const stats = card.querySelectorAll('.card-stat-value');
+  const humidity  = parseFloat(stats[0]?.textContent) || 65;
+  const wind      = parseFloat(stats[1]?.textContent) || 12;
+  if (city && !isNaN(rawC)) {
+    allCities.push({city, country:card.querySelector('.city-country')?.textContent||'', temp:rawC});
+    // Seed initial history point so chart isn't empty
+    if (!histData[city]) histData[city] = [];
+    histData[city].push({
+      t: new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
+      temp: rawC, humidity, wind,
+    });
+  }
 });
 
 // Set rawc on feat-temp
 const ft=document.getElementById('feat-temp');
 if(ft) ft.dataset.rawc=parseFloat(ft.textContent)||25;
+
+// Draw chart immediately with seeded data
+const _initCity = document.getElementById('history-city-label')?.textContent?.trim();
+if (_initCity && histData[_initCity]) {
+  setTimeout(()=>drawChart(histData[_initCity]), 200);
+}
 
 setInterval(autoRefresh, 60000);
 
