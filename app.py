@@ -287,6 +287,8 @@ HTML_TEMPLATE = """
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/twemoji.min.js" crossorigin="anonymous" defer></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <style>
 :root {
   --ink:#0a0a0f; --paper:#f2ede6; --accent:#e8441a;
@@ -486,6 +488,14 @@ body.dark .chart-outer{background:#1a1a24;}
 
 /* ── WORLD MAP ── */
 .map-section{margin-bottom:60px;}
+/* Leaflet customisation */
+.leaflet-weather-tooltip{background:#0d1a2a!important;border:1px solid #e8441a!important;color:#f2ede6!important;border-radius:4px!important;font-family:monospace!important;padding:8px 12px!important;box-shadow:0 4px 20px rgba(0,0,0,.6)!important;}
+.leaflet-weather-tooltip::before{border-top-color:#e8441a!important;}
+.leaflet-tooltip-top::before{border-top-color:#e8441a!important;}
+.leaflet-container{font-family:monospace!important;background:#050d1a!important;}
+.leaflet-control-attribution{display:none!important;}
+@keyframes mapPulse{0%,100%{box-shadow:0 0 0 0 rgba(232,68,26,.6);}70%{box-shadow:0 0 0 8px rgba(232,68,26,0);}}
+@keyframes mapRing{0%{transform:translate(-50%,-50%) scale(1);opacity:.4;}100%{transform:translate(-50%,-50%) scale(2);opacity:0;}}
 .map-outer{background:#050d1a;border:2px solid var(--border);overflow:hidden;position:relative;}
 .map-toolbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:rgba(0,0,0,.4);border-bottom:1px solid rgba(255,255,255,.06);flex-wrap:wrap;gap:8px;}
 .map-legend{display:flex;gap:14px;align-items:center;}
@@ -778,196 +788,32 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
         <div class="map-legend-item"><div class="map-legend-dot" style="background:#2196f3;"></div>6–15°C</div>
         <div class="map-legend-item"><div class="map-legend-dot" style="background:#9c27b0;"></div>&lt;6°C</div>
       </div>
-      <div class="map-zoom-btns">
-        <button class="map-zoom-btn" onclick="mapZoom(1.3)" title="Zoom in">+</button>
-        <button class="map-zoom-btn" onclick="mapZoom(0.77)" title="Zoom out">−</button>
-        <button class="map-zoom-btn" onclick="mapReset()" title="Reset">⌂</button>
+      <!-- Map search box -->
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div style="position:relative;">
+          <input id="map-search-input" type="text" placeholder="Search location on map..."
+            style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
+                   color:#f2ede6;padding:6px 36px 6px 12px;font-family:monospace;font-size:.68rem;
+                   border-radius:4px;outline:none;width:220px;letter-spacing:.5px;"
+            oninput="mapSearchDebounce(this.value)"
+            onkeydown="if(event.key==='Enter') mapSearchGo()">
+          <button onclick="mapSearchGo()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);
+            background:none;border:none;color:#e8441a;cursor:pointer;font-size:.9rem;">🔍</button>
+          <div id="map-search-results" style="display:none;position:absolute;top:100%;left:0;right:0;
+            background:#1a1a22;border:1px solid rgba(255,255,255,.12);border-radius:4px;
+            z-index:2000;max-height:200px;overflow-y:auto;margin-top:2px;"></div>
+        </div>
+        <div class="map-zoom-btns">
+          <button class="map-zoom-btn" onclick="_leafletMap && _leafletMap.zoomIn()" title="Zoom in">+</button>
+          <button class="map-zoom-btn" onclick="_leafletMap && _leafletMap.zoomOut()" title="Zoom out">−</button>
+          <button class="map-zoom-btn" onclick="mapReset()" title="Reset view">⌂</button>
+        </div>
       </div>
     </div>
-    <div class="map-wrap" id="map-wrap">
-      <svg id="world-svg" viewBox="0 0 1010 506" preserveAspectRatio="xMidYMid meet" style="cursor:grab;">
-        <defs>
-          <radialGradient id="ocean-grad" cx="50%" cy="50%" r="80%">
-            <stop offset="0%" stop-color="#0d2137"/>
-            <stop offset="100%" stop-color="#050d1a"/>
-          </radialGradient>
-          <filter id="land-shadow">
-            <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="rgba(0,0,0,.4)"/>
-          </filter>
-        </defs>
-        <!-- Ocean background -->
-        <rect width="1010" height="506" fill="url(#ocean-grad)"/>
-        <!-- Graticule (lat/lon grid) -->
-        <g stroke="#0e2a42" stroke-width="0.4" fill="none" opacity="0.6">
-          <!-- Longitude lines every 30° -->
-          <line x1="84" y1="0" x2="84" y2="506"/>
-          <line x1="168" y1="0" x2="168" y2="506"/>
-          <line x1="252" y1="0" x2="252" y2="506"/>
-          <line x1="336" y1="0" x2="336" y2="506"/>
-          <line x1="420" y1="0" x2="420" y2="506"/>
-          <line x1="505" y1="0" x2="505" y2="506"/>
-          <line x1="589" y1="0" x2="589" y2="506"/>
-          <line x1="673" y1="0" x2="673" y2="506"/>
-          <line x1="757" y1="0" x2="757" y2="506"/>
-          <line x1="841" y1="0" x2="841" y2="506"/>
-          <line x1="925" y1="0" x2="925" y2="506"/>
-          <!-- Latitude lines every 30° -->
-          <line x1="0" y1="57" x2="1010" y2="57"/>
-          <line x1="0" y1="148" x2="1010" y2="148"/>
-          <line x1="0" y1="253" x2="1010" y2="253"/>
-          <line x1="0" y1="358" x2="1010" y2="358"/>
-          <line x1="0" y1="449" x2="1010" y2="449"/>
-          <!-- Equator highlight -->
-          <line x1="0" y1="253" x2="1010" y2="253" stroke="#1a3a55" stroke-width="1"/>
-        </g>
-        <!-- Lat labels -->
-        <g fill="#1e4060" font-family="monospace" font-size="8">
-          <text x="3" y="59">60°N</text>
-          <text x="3" y="150">30°N</text>
-          <text x="3" y="248">EQ</text>
-          <text x="3" y="360">30°S</text>
-          <text x="3" y="451">60°S</text>
-        </g>
-
-        <!-- ═══ CONTINENTS (accurate simplified paths) ═══ -->
-        <g fill="#162035" stroke="#1e3050" stroke-width="0.8" filter="url(#land-shadow)">
-
-        <!-- NORTH AMERICA -->
-        <path d="M 90 57 L 140 52 L 170 58 L 185 50 L 200 55 L 215 48 L 240 55 L 255 70
-                 L 260 90 L 270 105 L 265 125 L 255 140 L 240 150 L 230 165 L 220 185
-                 L 215 205 L 205 220 L 195 235 L 190 250 L 180 255 L 165 248 L 155 235
-                 L 145 220 L 140 200 L 135 185 L 125 170 L 115 155 L 105 140 L 95 125
-                 L 85 110 L 80 90 L 83 70 Z"/>
-
-        <!-- GREENLAND -->
-        <path d="M 210 25 L 250 20 L 275 28 L 280 45 L 265 58 L 245 62 L 225 55 L 210 42 Z"/>
-
-        <!-- CENTRAL AMERICA -->
-        <path d="M 180 255 L 190 250 L 195 260 L 192 270 L 185 278 L 178 272 L 175 262 Z"/>
-
-        <!-- SOUTH AMERICA -->
-        <path d="M 195 275 L 215 270 L 240 275 L 260 285 L 275 300 L 285 320 L 290 345
-                 L 288 370 L 280 395 L 268 415 L 252 428 L 238 435 L 225 432 L 212 422
-                 L 200 408 L 190 390 L 183 368 L 180 345 L 180 318 L 183 295 L 190 280 Z"/>
-
-        <!-- EUROPE -->
-        <path d="M 440 80 L 460 72 L 480 68 L 500 72 L 515 80 L 525 92 L 520 105
-                 L 510 115 L 498 120 L 488 128 L 478 135 L 465 138 L 452 132 L 445 122
-                 L 440 110 L 438 95 Z"/>
-        <!-- Iberian peninsula -->
-        <path d="M 440 125 L 455 120 L 468 128 L 465 145 L 452 152 L 438 148 L 433 138 Z"/>
-        <!-- Scandinavia -->
-        <path d="M 475 58 L 490 52 L 505 55 L 510 68 L 505 80 L 490 85 L 478 80 L 472 68 Z"/>
-        <!-- UK -->
-        <path d="M 450 90 L 460 85 L 468 92 L 465 105 L 455 108 L 447 102 Z"/>
-        <!-- Italy -->
-        <path d="M 490 128 L 500 122 L 510 130 L 508 148 L 498 158 L 490 152 L 487 140 Z"/>
-
-        <!-- AFRICA -->
-        <path d="M 455 155 L 478 148 L 500 150 L 520 155 L 538 165 L 548 180 L 552 200
-                 L 550 225 L 545 250 L 542 275 L 538 300 L 530 325 L 518 348 L 502 365
-                 L 485 375 L 468 372 L 452 360 L 440 342 L 432 318 L 428 292 L 428 265
-                 L 430 240 L 433 215 L 438 190 L 445 172 Z"/>
-        <!-- Madagascar -->
-        <path d="M 560 295 L 568 288 L 575 298 L 572 318 L 562 325 L 555 315 L 556 302 Z"/>
-
-        <!-- RUSSIA (spans huge area) -->
-        <path d="M 505 58 L 560 50 L 630 45 L 700 42 L 770 45 L 840 50 L 900 58 L 930 72
-                 L 940 88 L 935 105 L 920 115 L 900 120 L 875 118 L 850 122 L 825 128
-                 L 800 130 L 775 128 L 750 125 L 720 120 L 695 118 L 670 120 L 645 125
-                 L 620 128 L 595 130 L 570 128 L 550 122 L 530 115 L 518 105 L 512 92 Z"/>
-
-        <!-- MIDDLE EAST / ARABIAN PENINSULA -->
-        <path d="M 548 155 L 568 148 L 590 150 L 610 158 L 622 175 L 618 195 L 605 208
-                 L 588 215 L 570 210 L 555 198 L 548 180 Z"/>
-
-        <!-- SOUTH ASIA (India prominent) -->
-        <path d="M 608 155 L 640 148 L 670 150 L 695 158 L 710 172 L 715 192 L 712 210
-                 L 700 225 L 685 232 L 668 230 L 652 220 L 638 205 L 628 188 L 620 172 Z"/>
-        <!-- India peninsula -->
-        <path d="M 638 205 L 660 200 L 678 210 L 680 232 L 672 250 L 658 258 L 645 250
-                 L 636 235 Z"/>
-        <!-- Sri Lanka -->
-        <path d="M 665 258 L 672 255 L 676 264 L 670 270 L 663 265 Z"/>
-
-        <!-- SOUTHEAST ASIA -->
-        <path d="M 712 168 L 740 162 L 762 168 L 775 182 L 770 198 L 755 208 L 738 210
-                 L 722 202 L 714 188 Z"/>
-        <!-- Indochina -->
-        <path d="M 740 180 L 760 175 L 775 185 L 778 205 L 768 225 L 750 232 L 735 225
-                 L 728 208 L 730 192 Z"/>
-        <!-- Malay peninsula -->
-        <path d="M 748 232 L 758 228 L 765 240 L 760 258 L 750 262 L 742 252 L 742 240 Z"/>
-
-        <!-- CHINA / EAST ASIA -->
-        <path d="M 670 120 L 730 115 L 780 118 L 810 128 L 825 145 L 822 165 L 808 178
-                 L 790 182 L 768 178 L 745 165 L 722 155 L 700 148 L 682 138 L 670 128 Z"/>
-
-        <!-- JAPAN -->
-        <path d="M 842 130 L 855 125 L 865 132 L 868 148 L 858 160 L 845 158 L 838 145 Z"/>
-        <!-- Kyushu/Honshu chain -->
-        <path d="M 850 148 L 862 142 L 872 150 L 870 165 L 858 170 L 848 162 Z"/>
-
-        <!-- KOREA -->
-        <path d="M 812 138 L 825 133 L 835 140 L 833 155 L 822 162 L 812 155 Z"/>
-
-        <!-- INDONESIA (scattered islands) -->
-        <path d="M 755 265 L 785 260 L 810 265 L 820 278 L 808 290 L 785 292 L 762 285 Z"/>
-        <path d="M 820 268 L 848 262 L 862 272 L 858 288 L 840 295 L 822 288 Z"/>
-        <path d="M 862 272 L 885 268 L 900 278 L 895 292 L 875 298 L 860 290 Z"/>
-
-        <!-- AUSTRALIA -->
-        <path d="M 760 320 L 820 308 L 875 312 L 918 328 L 938 350 L 940 378 L 928 402
-                 L 908 418 L 880 425 L 848 422 L 818 412 L 792 395 L 772 372 L 758 348
-                 L 752 325 Z"/>
-        <!-- Tasmania -->
-        <path d="M 880 432 L 892 428 L 898 440 L 890 448 L 878 444 Z"/>
-        <!-- New Zealand (North) -->
-        <path d="M 945 378 L 958 372 L 965 382 L 960 398 L 948 402 L 942 392 Z"/>
-        <!-- New Zealand (South) -->
-        <path d="M 940 402 L 952 398 L 960 410 L 955 428 L 942 432 L 935 420 Z"/>
-
-        <!-- CENTRAL ASIA -->
-        <path d="M 548 128 L 600 120 L 640 118 L 670 122 L 680 138 L 668 150 L 640 155
-                 L 608 155 L 580 150 L 558 142 Z"/>
-
-        <!-- ALASKA -->
-        <path d="M 50 55 L 85 50 L 95 60 L 88 75 L 72 80 L 55 75 L 46 65 Z"/>
-
-        <!-- ICELAND -->
-        <path d="M 390 65 L 410 60 L 420 70 L 415 82 L 400 88 L 388 80 Z"/>
-
-        <!-- CAUCASUS / TURKEY -->
-        <path d="M 520 128 L 548 122 L 562 130 L 560 145 L 545 152 L 525 148 L 515 138 Z"/>
-
-        </g>
-
-        <!-- Highlighted countries for our cities -->
-        <g opacity="0.15">
-          <!-- India highlight -->
-          <path d="M 638 205 L 660 200 L 678 210 L 680 232 L 672 250 L 658 258 L 645 250 L 636 235 Z
-                   M 608 155 L 640 148 L 670 150 L 695 158 L 710 172 L 715 192 L 712 210
-                   L 700 225 L 685 232 L 668 230 L 652 220 L 638 205 L 628 188 L 620 172 Z"
-                fill="#ff9800"/>
-          <!-- Japan highlight -->
-          <path d="M 842 130 L 855 125 L 865 132 L 868 148 L 858 160 L 845 158 L 838 145 Z
-                   M 850 148 L 862 142 L 872 150 L 870 165 L 858 170 L 848 162 Z"
-                fill="#e91e63"/>
-          <!-- Russia highlight -->
-          <path d="M 505 58 L 560 50 L 630 45 L 700 42 L 770 45 L 840 50 L 900 58 L 930 72
-                   L 940 88 L 935 105 L 920 115 L 900 120 L 875 118 L 850 122 L 825 128
-                   L 800 130 L 775 128 L 750 125 L 720 120 L 695 118 L 670 120 L 645 125
-                   L 620 128 L 595 130 L 570 128 L 550 122 L 530 115 L 518 105 L 512 92 Z"
-                fill="#2196f3"/>
-          <!-- South Africa highlight -->
-          <path d="M 455 338 L 502 328 L 538 340 L 540 360 L 518 378 L 490 382 L 462 372 L 448 355 Z"
-                fill="#4caf50"/>
-        </g>
-
-        <!-- City dots will be injected here by JS -->
-        <g id="map-city-dots"></g>
-      </svg>
-      <div class="map-tooltip" id="map-tooltip"></div>
+    <!-- Leaflet map container -->
+    <div id="map-wrap" style="height:480px;width:100%;background:#050d1a;"></div>
+    <div style="font-family:monospace;font-size:.58rem;color:#444;padding:4px 8px;text-align:right;">
+      Click anywhere on the map to get live weather · © OpenStreetMap contributors
     </div>
   </div>
 </section>
@@ -1544,15 +1390,12 @@ function drawChart(points) {
 }
 
 // ── World Map ──────────────────────────────────────────────────────────────
-let mapScale = 1, mapTx = 0, mapTy = 0, mapDragging = false, mapDragStart = {};
-
-function latLonToSVG(lat, lon) {
-  // Mercator projection matching the viewBox 0 0 1010 506
-  const x = ((lon + 180) / 360) * 1010;
-  const latRad = lat * Math.PI / 180;
-  const y = (0.5 - Math.log(Math.tan(Math.PI/4 + latRad/2)) / (2*Math.PI)) * 506;
-  return {x, y};
-}
+// ── Leaflet Map ───────────────────────────────────────────────────────────
+let _leafletMap    = null;
+let _leafletMarkers = [];
+let _mapSearchTimer = null;
+let _mapSearchResults = [];
+let _clickMarker   = null;
 
 function tempColor(t) {
   if (t > 35) return '#f44336';
@@ -1562,94 +1405,207 @@ function tempColor(t) {
   return '#9c27b0';
 }
 
+function initLeafletMap() {
+  if (_leafletMap || typeof L === 'undefined') return;
+
+  _leafletMap = L.map('map-wrap', {
+    center: [20, 0],
+    zoom: 2,
+    minZoom: 2,
+    maxZoom: 18,
+    zoomControl: false,   // we use custom buttons
+    attributionControl: false,
+  });
+
+  // Dark OpenStreetMap tile layer (free, no key)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
+    maxZoom: 19,
+  }).addTo(_leafletMap);
+
+  // Click on map → fetch weather for that location
+  _leafletMap.on('click', function(e) {
+    const lat = e.latlng.lat.toFixed(5);
+    const lon = e.latlng.lng.toFixed(5);
+    mapClickWeather(lat, lon);
+  });
+}
+
 function renderMapDots(weatherList) {
-  const svg   = document.getElementById('world-svg');
-  const group = document.getElementById('map-city-dots');
-  const tt    = document.getElementById('map-tooltip');
-  if (!group) return;
-  group.innerHTML = '';
+  if (typeof L === 'undefined') {
+    setTimeout(() => renderMapDots(weatherList), 300);
+    return;
+  }
+  if (!_leafletMap) initLeafletMap();
+
+  // Clear existing markers
+  _leafletMarkers.forEach(m => m.remove());
+  _leafletMarkers = [];
 
   weatherList.forEach(w => {
-    const {x, y} = latLonToSVG(w.lat||0, w.lon||0);
-    if (isNaN(x)||isNaN(y)||y<0||y>506||x<0||x>1010) return;
-    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
-    g.setAttribute('class','map-city-group');
+    if (!w.lat || !w.lon) return;
+    const color = tempColor(w.temp);
+    const size  = 14;
 
-    // Pulse ring
-    const pulse = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    pulse.setAttribute('cx', x); pulse.setAttribute('cy', y); pulse.setAttribute('r', 9);
-    pulse.setAttribute('fill', 'none');
-    pulse.setAttribute('stroke', tempColor(w.temp)); pulse.setAttribute('stroke-width','1.5');
-    pulse.setAttribute('opacity','0.4');
-    pulse.innerHTML = `<animate attributeName="r" from="6" to="14" dur="2s" repeatCount="indefinite"/>
-                       <animate attributeName="opacity" from="0.4" to="0" dur="2s" repeatCount="indefinite"/>`;
-
-    // Main dot
-    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('r','6');
-    dot.setAttribute('fill', tempColor(w.temp));
-    dot.setAttribute('stroke','#fff'); dot.setAttribute('stroke-width','1.2');
-    dot.setAttribute('class','map-city-dot');
-
-    // City label (shows on hover)
-    const label = document.createElementNS('http://www.w3.org/2000/svg','text');
-    label.setAttribute('x', x+9); label.setAttribute('y', y+4);
-    label.setAttribute('class','map-city-label');
-    label.textContent = w.city;
-
-    g.appendChild(pulse); g.appendChild(dot); g.appendChild(label);
-
-    // Hover tooltip
-    g.addEventListener('mouseenter', e => {
-      const svgRect = svg.getBoundingClientRect();
-      const px = (x/1010)*svgRect.width  + svgRect.left;
-      const py = (y/506) *svgRect.height + svgRect.top;
-      tt.innerHTML = `<div class="map-tooltip-city">${w.icon||'🌡️'} ${w.city}</div>
-        <div>🌡 ${dispTemp(w.temp)} \u00a0 💧${w.humidity||'—'}%</div>
-        <div>💨 ${w.wind_speed||'—'} km/h \u00a0 UV ${w.uv_index||'—'}</div>
-        <div style="color:${w.aqi_color||'#0c8'};margin-top:2px;">AQI ${w.aqi||'—'} · ${w.aqi_label||'—'}</div>`;
-      const mapRect = document.getElementById('map-wrap').getBoundingClientRect();
-      tt.style.left = (px - mapRect.left + 14) + 'px';
-      tt.style.top  = (py - mapRect.top  - 20) + 'px';
-      tt.style.display = 'block';
+    // Custom pulsing circle marker
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="
+        width:${size}px;height:${size}px;border-radius:50%;
+        background:${color};border:2px solid #fff;
+        box-shadow:0 0 0 0 ${color};
+        animation:mapPulse 2s infinite;position:relative;">
+        <div style="
+          position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+          width:${size+8}px;height:${size+8}px;border-radius:50%;
+          border:1.5px solid ${color};opacity:.4;
+          animation:mapRing 2s infinite;pointer-events:none;"></div>
+      </div>`,
+      iconSize: [size, size],
+      iconAnchor: [size/2, size/2],
     });
-    g.addEventListener('mouseleave', ()=>{ tt.style.display='none'; });
-    g.addEventListener('click', ()=>selectCity(w.city));
-    group.appendChild(g);
+
+    const marker = L.marker([w.lat, w.lon], {icon})
+      .addTo(_leafletMap)
+      .bindTooltip(`
+        <div style="font-family:monospace;font-size:.7rem;line-height:1.7;min-width:150px;">
+          <div style="font-weight:700;font-size:.8rem;margin-bottom:4px;">${w.icon||'🌡️'} ${w.city}</div>
+          <div>🌡 ${w.temp}°C &nbsp; 💧${w.humidity||'—'}%</div>
+          <div>💨 ${w.wind_speed||'—'} km/h &nbsp; UV ${w.uv_index||'—'}</div>
+          <div style="color:${w.aqi_color||'#0c8'};margin-top:2px;">AQI ${w.aqi||'—'} · ${w.aqi_label||'—'}</div>
+          <div style="color:#888;font-size:.58rem;margin-top:3px;">Click to select</div>
+        </div>`, {
+          direction: 'top',
+          offset: [0, -8],
+          className: 'leaflet-weather-tooltip',
+        })
+      .on('click', () => selectCity(w.city));
+
+    _leafletMarkers.push(marker);
   });
 }
 
-// Map zoom/pan
-function mapZoom(factor) {
-  mapScale = Math.min(Math.max(mapScale * factor, 0.8), 8);
-  applyMapTransform();
-}
-function mapReset() { mapScale=1; mapTx=0; mapTy=0; applyMapTransform(); }
-function applyMapTransform() {
-  const svg = document.getElementById('world-svg');
-  if (svg) svg.style.transform = `scale(${mapScale}) translate(${mapTx}px,${mapTy}px)`;
+function mapReset() {
+  if (_leafletMap) _leafletMap.setView([20, 0], 2);
 }
 
-// Drag to pan
-const mapWrap = document.getElementById('map-wrap');
-if (mapWrap) {
-  mapWrap.addEventListener('mousedown', e => {
-    mapDragging=true;
-    mapDragStart={x: e.clientX, y: e.clientY, tx: mapTx, ty: mapTy};
-    mapWrap.style.cursor='grabbing';
-    e.preventDefault();
+// Click anywhere on map to get weather
+function mapClickWeather(lat, lon) {
+  // Remove previous click marker
+  if (_clickMarker) { _clickMarker.remove(); _clickMarker = null; }
+
+  // Show loading pin
+  const loadIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:12px;height:12px;border-radius:50%;background:#e8441a;border:2px solid #fff;animation:mapPulse 1s infinite;"></div>`,
+    iconSize: [12, 12], iconAnchor: [6, 6],
   });
-  mapWrap.addEventListener('mousemove', e => {
-    if(!mapDragging) return;
-    mapTx = mapDragStart.tx + (e.clientX - mapDragStart.x) / mapScale;
-    mapTy = mapDragStart.ty + (e.clientY - mapDragStart.y) / mapScale;
-    applyMapTransform();
-  });
-  mapWrap.addEventListener('mouseup',   ()=>{ mapDragging=false; mapWrap.style.cursor='grab'; });
-  mapWrap.addEventListener('mouseleave',()=>{ mapDragging=false; });
-  mapWrap.addEventListener('wheel', e => { e.preventDefault(); mapZoom(e.deltaY<0?1.15:0.87); }, {passive:false});
+  _clickMarker = L.marker([lat, lon], {icon: loadIcon}).addTo(_leafletMap);
+
+  document.getElementById('featured-loading').style.display = 'inline';
+  document.querySelector('.featured-section').scrollIntoView({behavior:'smooth', block:'start'});
+
+  // Reverse geocode to get place name
+  fetch(`/api/geocode?q=${lat},${lon}`)
+    .then(r => r.json())
+    .then(geo => {
+      const name    = geo.results?.[0]?.name    || `${parseFloat(lat).toFixed(2)}°N, ${parseFloat(lon).toFixed(2)}°E`;
+      const country = geo.results?.[0]?.country_name || '';
+      // Get weather
+      return fetch(`/api/preview?lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}&country=${encodeURIComponent(country)}`);
+    })
+    .then(r => r.json())
+    .then(d => {
+      updateFeaturedPanel(d);
+      updateForecast(d.city, d.forecast || []);
+      document.getElementById('featured-loading').style.display = 'none';
+      document.querySelectorAll('.city-card').forEach(c => c.classList.remove('selected'));
+      currentCity = null;
+      const badge = document.getElementById('preview-badge');
+      if (badge) badge.style.display = 'inline-flex';
+      // Update click marker to show result
+      if (_clickMarker) {
+        _clickMarker.remove();
+        const doneIcon = L.divIcon({
+          className: '',
+          html: `<div style="width:12px;height:12px;border-radius:50%;background:#4caf50;border:2px solid #fff;"></div>`,
+          iconSize: [12,12], iconAnchor: [6,6],
+        });
+        _clickMarker = L.marker([lat, lon], {icon: doneIcon})
+          .addTo(_leafletMap)
+          .bindTooltip(`📍 ${d.city || name}: ${d.temp}°C`, {direction:'top', offset:[0,-8]})
+          .openTooltip();
+      }
+    })
+    .catch(() => {
+      document.getElementById('featured-loading').style.display = 'none';
+      if (_clickMarker) { _clickMarker.remove(); _clickMarker = null; }
+    });
 }
 
+// Map search
+function mapSearchDebounce(q) {
+  clearTimeout(_mapSearchTimer);
+  const box = document.getElementById('map-search-results');
+  if (!q.trim()) { box.style.display = 'none'; return; }
+  _mapSearchTimer = setTimeout(() => mapSearchGo(q), 400);
+}
+
+function mapSearchGo(q) {
+  q = q || document.getElementById('map-search-input').value.trim();
+  if (!q) return;
+  const box = document.getElementById('map-search-results');
+  box.innerHTML = `<div style="padding:8px 12px;font-family:monospace;font-size:.65rem;color:#666;">Searching...</div>`;
+  box.style.display = 'block';
+
+  fetch('/api/geocode?q=' + encodeURIComponent(q))
+    .then(r => r.json())
+    .then(data => {
+      _mapSearchResults = data.results || [];
+      if (!_mapSearchResults.length) {
+        box.innerHTML = `<div style="padding:8px 12px;font-family:monospace;font-size:.65rem;color:#666;">No results found.</div>`;
+        return;
+      }
+      box.innerHTML = _mapSearchResults.slice(0, 8).map((r, i) => `
+        <div onclick="mapSearchSelect(${i})" style="
+          padding:9px 12px;font-family:monospace;font-size:.68rem;color:#ccc;
+          cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);
+          display:flex;flex-direction:column;gap:2px;"
+          onmouseover="this.style.background='rgba(232,68,26,.12)'"
+          onmouseout="this.style.background='transparent'">
+          <span style="font-weight:600;">${r.country_code==='IN'?'🇮🇳':'🌍'} ${r.name}</span>
+          <span style="color:#555;font-size:.58rem;">${r.district ? r.district+', ':''} ${r.state||''}</span>
+        </div>`).join('');
+    })
+    .catch(() => {
+      box.innerHTML = `<div style="padding:8px 12px;font-family:monospace;font-size:.65rem;color:#f44336;">Search failed.</div>`;
+    });
+}
+
+function mapSearchSelect(idx) {
+  const r = _mapSearchResults[idx];
+  if (!r || !_leafletMap) return;
+  document.getElementById('map-search-input').value = r.name;
+  document.getElementById('map-search-results').style.display = 'none';
+  // Fly to location and fetch weather
+  _leafletMap.flyTo([r.lat, r.lon], 12, {duration: 1.2});
+  mapClickWeather(r.lat, r.lon);
+}
+
+// Close map search on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('#map-search-input') && !e.target.closest('#map-search-results')) {
+    const box = document.getElementById('map-search-results');
+    if (box) box.style.display = 'none';
+  }
+});
+
+// Init map after Leaflet loads
+if (typeof L !== 'undefined') {
+  initLeafletMap();
+} else {
+  window.addEventListener('load', initLeafletMap);
+}
 // ── Forecast ───────────────────────────────────────────────────────────────
 function updateForecast(cityName, fc) {
   document.getElementById('forecast-label').textContent = '7-Day Outlook · '+cityName;
@@ -2377,10 +2333,11 @@ if (typeof twemoji!=='undefined') {
   window.addEventListener('load',()=>twemoji.parse(document.body));
 }
 
-// Initial map render after a moment
+// Initial map render — init Leaflet then plot dots
 setTimeout(()=>{
+  initLeafletMap();
   if (allCities.length) renderMapDots(allCities);
-}, 500);
+}, 600);
 
 // Initial bg
 setWeatherBg('{{ featured.condition }}');
