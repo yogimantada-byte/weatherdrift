@@ -127,69 +127,95 @@ def get_aqi_label(aqi):
 
 def fetch_single_city(city, coords):
     lat, lon = coords["lat"], coords["lon"]
-    url = (f"https://api.open-meteo.com/v1/forecast"
-           f"?latitude={lat}&longitude={lon}&current_weather=true"
-           f"&hourly=relativehumidity_2m,apparent_temperature,visibility,"
-           f"surface_pressure,uv_index,precipitation_probability,windspeed_10m"
-           f"&daily=weathercode,temperature_2m_max,temperature_2m_min,"
-           f"sunrise,sunset,precipitation_probability_max"
-           f"&timezone=auto&forecast_days=1")
-    # AQI from Open-Meteo air quality API
-    aqi_url = (f"https://air-quality-api.open-meteo.com/v1/air-quality"
-               f"?latitude={lat}&longitude={lon}&hourly=us_aqi&timezone=auto&forecast_days=1")
+    # Use current= (not deprecated current_weather=) for accurate real-time data
+    # Request all fields we need directly as current values — no index guessing
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,"
+        f"weather_code,wind_speed_10m,surface_pressure,visibility,"
+        f"uv_index,precipitation_probability,is_day"
+        f"&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,"
+        f"weather_code,wind_speed_10m,precipitation_probability,visibility,uv_index"
+        f"&daily=weather_code,temperature_2m_max,temperature_2m_min,"
+        f"sunrise,sunset,precipitation_probability_max"
+        f"&timezone=auto&forecast_days=2"
+    )
+    aqi_url = (
+        f"https://air-quality-api.open-meteo.com/v1/air-quality"
+        f"?latitude={lat}&longitude={lon}&current=us_aqi&timezone=auto"
+    )
     for attempt in range(3):
         try:
             r = requests.get(url, timeout=15)
             r.raise_for_status()
             data = r.json()
-            weather = data["current_weather"]
-            temp = round(weather["temperature"])
-            wind = round(weather["windspeed"])
-            icon, condition = get_weather_icon(weather["weathercode"])
-            hourly = data.get("hourly", {})
-            daily  = data.get("daily", {})
-            # Current hour index
-            now_h  = datetime.now().hour
-            # Sunrise/Sunset
+
+            # ── Current conditions (accurate real-time values) ──────────────
+            cur  = data["current"]
+            temp     = round(cur["temperature_2m"])
+            humidity = cur.get("relative_humidity_2m", 60)
+            feels    = round(cur.get("apparent_temperature", temp))
+            wind     = round(cur.get("wind_speed_10m", 0))
+            pressure = round(cur.get("surface_pressure", 1013))
+            vis      = round(cur.get("visibility", 10000) / 1000, 1)
+            uv       = round(cur.get("uv_index", 0), 1)
+            rain_now = cur.get("precipitation_probability", 0) or 0
+            wcode    = cur.get("weather_code", 0)
+            icon, condition = get_weather_icon(wcode)
+
+            # ── Find current hour index in hourly array ─────────────────────
+            hourly     = data.get("hourly", {})
+            h_times    = hourly.get("time", [])
+            now_str    = cur.get("time", "")[:13]   # "2024-03-08T14"
+            try:
+                now_h = next(i for i, t in enumerate(h_times) if t[:13] == now_str)
+            except StopIteration:
+                now_h = datetime.now().hour
+
+            # ── Sunrise / Sunset ────────────────────────────────────────────
+            daily   = data.get("daily", {})
             sunrise = daily.get("sunrise", [""])[0]
-            sunset  = daily.get("sunset", [""])[0]
+            sunset  = daily.get("sunset",  [""])[0]
             sunrise_t = sunrise.split("T")[-1][:5] if sunrise else "06:00"
             sunset_t  = sunset.split("T")[-1][:5]  if sunset  else "18:00"
-            # Rain probability
-            rain_prob = hourly.get("precipitation_probability", [0] * 24)
-            rain_now  = rain_prob[min(now_h, len(rain_prob)-1)] if rain_prob else 0
-            # AQI
+
+            # ── AQI ─────────────────────────────────────────────────────────
             aqi_val = 50
             try:
-                aq = requests.get(aqi_url, timeout=8).json()
-                aqi_list = aq.get("hourly", {}).get("us_aqi", [])
-                aqi_val = int(aqi_list[min(now_h, len(aqi_list)-1)]) if aqi_list else 50
+                aq      = requests.get(aqi_url, timeout=8).json()
+                aqi_val = int(aq.get("current", {}).get("us_aqi") or 50)
             except: pass
             aqi_label, aqi_color = get_aqi_label(aqi_val)
-            # Hourly forecast (next 24h)
+
+            # ── Hourly strip (next 8 slots × 3h) ───────────────────────────
             hourly_fc = []
-            for i in range(0, 24, 3):
-                if i < len(hourly.get("windspeed_10m", [])):
-                    h_icon, h_cond = get_weather_icon(weather["weathercode"])
-                    hourly_fc.append({
-                        "hour": f"{(now_h + i) % 24:02d}:00",
-                        "temp": round(hourly.get("apparent_temperature", [temp]*24)[min(i, 23)]),
-                        "icon": h_icon,
-                        "rain": hourly.get("precipitation_probability", [0]*24)[min(i,23)],
-                    })
+            h_wcode   = hourly.get("weather_code",             [wcode]*48)
+            h_temp    = hourly.get("apparent_temperature",     [feels]*48)
+            h_rain    = hourly.get("precipitation_probability",[0]*48)
+            h_times_full = hourly.get("time", [])
+            for offset in range(0, 24, 3):
+                idx = min(now_h + offset, len(h_wcode) - 1)
+                if idx < 0 or idx >= len(h_times_full): continue
+                h_icon, _ = get_weather_icon(h_wcode[idx])
+                slot_time = h_times_full[idx][11:16] if idx < len(h_times_full) else f"{(now_h+offset)%24:02d}:00"
+                hourly_fc.append({
+                    "hour": slot_time,
+                    "temp": round(h_temp[idx]) if idx < len(h_temp) else temp,
+                    "icon": h_icon,
+                    "rain": h_rain[idx] if idx < len(h_rain) else 0,
+                })
+
             return {
                 "city": city, "country": coords["country"],
-                "temp": temp, "feels_like": round(hourly.get("apparent_temperature",[temp])[0]),
-                "humidity": hourly.get("relativehumidity_2m",[50])[0],
-                "wind_speed": wind, "condition": condition, "icon": icon,
-                "uv_index": round(hourly.get("uv_index",[0])[0], 1),
-                "visibility": round(hourly.get("visibility",[10000])[0]/1000, 1),
-                "pressure": round(hourly.get("surface_pressure",[1013])[0]),
+                "temp": temp, "feels_like": feels,
+                "humidity": humidity, "wind_speed": wind,
+                "condition": condition, "icon": icon,
+                "uv_index": uv, "visibility": vis, "pressure": pressure,
                 "sunrise": sunrise_t, "sunset": sunset_t,
                 "rain_prob": rain_now,
                 "aqi": aqi_val, "aqi_label": aqi_label, "aqi_color": aqi_color,
-                "hourly": hourly_fc,
-                "lat": lat, "lon": lon,
+                "hourly": hourly_fc, "lat": lat, "lon": lon,
             }
         except Exception as e:
             print(f"[{city}] Attempt {attempt+1} failed: {e}")
@@ -248,33 +274,7 @@ def get_forecast(city_name):
     all_c = get_all_cities()
     coords = all_c.get(city_name)
     if not coords: return []
-    lat, lon = coords["lat"], coords["lon"]
-    url = (f"https://api.open-meteo.com/v1/forecast"
-           f"?latitude={lat}&longitude={lon}"
-           f"&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
-           f"&timezone=auto&forecast_days=7")
-    try:
-        data = requests.get(url, timeout=10).json()
-        daily = data["daily"]
-        fc = []
-        for i in range(7):
-            d = datetime.strptime(daily["time"][i], "%Y-%m-%d")
-            icon, cond = get_weather_icon(daily["weathercode"][i])
-            fc.append({
-                "day": "Today" if i == 0 else d.strftime("%a"),
-                "icon": icon, "condition": cond,
-                "high": round(daily["temperature_2m_max"][i]),
-                "low":  round(daily["temperature_2m_min"][i]),
-                "rain": daily.get("precipitation_probability_max", [0]*7)[i],
-            })
-        return fc
-    except:
-        days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
-        today = datetime.now().weekday()
-        return [{"day": "Today" if i==0 else days[(today+i)%7],
-                 "icon":"⛅","condition":"Partly Cloudy",
-                 "high":random.randint(20,35),"low":random.randint(10,19),"rain":20}
-                for i in range(7)]
+    return _get_forecast_by_coords(coords["lat"], coords["lon"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 HTML_TEMPLATE = """
@@ -1684,9 +1684,17 @@ function renderMapDots(weatherList) {
     _leafletMarkers.push(marker);
   });
 
-  // Register zoomend once — re-renders markers with new size
+  // Debounced zoom re-render — fires once after zoom animation fully settles.
+  // Uses 'zoomend' (fires once per discrete zoom, not per animation frame).
+  // Guard: skip if already registered.
   if (!_onMapZoom) {
-    _onMapZoom = function() { renderMapDots(null); };
+    let _zoomTimer = null;
+    _onMapZoom = function() {
+      clearTimeout(_zoomTimer);
+      _zoomTimer = setTimeout(function() {
+        if (_lastWeatherList && _lastWeatherList.length) renderMapDots(null);
+      }, 150);
+    };
     _leafletMap.on('zoomend', _onMapZoom);
   }
 }
@@ -1694,8 +1702,14 @@ function renderMapDots(weatherList) {
 // Fit map to show all city markers
 function mapFitAll() {
   if (!_leafletMap || !_leafletMarkers.length) return;
-  const group = L.featureGroup(_leafletMarkers);
-  _leafletMap.fitBounds(group.getBounds().pad(0.1), { animate: true });
+  try {
+    const group = L.featureGroup(_leafletMarkers);
+    const bounds = group.getBounds();
+    if (bounds.isValid()) {
+      // animate:false prevents cascading zoomend events during bounds animation
+      _leafletMap.fitBounds(bounds.pad(0.08), { animate: false, maxZoom: 6 });
+    }
+  } catch(e) {}
 }
 
 // Fly to user's GPS location
@@ -3067,29 +3081,38 @@ def add_city():
 
 
 def _get_forecast_by_coords(lat, lon):
-    url = (f"https://api.open-meteo.com/v1/forecast"
-           f"?latitude={lat}&longitude={lon}"
-           f"&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
-           f"&timezone=auto&forecast_days=7")
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        f"&daily=weather_code,temperature_2m_max,temperature_2m_min,"
+        f"precipitation_probability_max,wind_speed_10m_max"
+        f"&timezone=auto&forecast_days=7"
+    )
     try:
         data  = requests.get(url, timeout=10).json()
         daily = data["daily"]
         fc    = []
-        for i in range(7):
-            d = datetime.strptime(daily["time"][i], "%Y-%m-%d")
-            icon, cond = get_weather_icon(daily["weathercode"][i])
+        for i in range(min(7, len(daily.get("time", [])))):
+            d    = datetime.strptime(daily["time"][i], "%Y-%m-%d")
+            icon, cond = get_weather_icon(daily["weather_code"][i])
             fc.append({
                 "day":  "Today" if i == 0 else d.strftime("%a"),
+                "date": daily["time"][i],
                 "icon": icon, "condition": cond,
                 "high": round(daily["temperature_2m_max"][i]),
                 "low":  round(daily["temperature_2m_min"][i]),
-                "rain": daily.get("precipitation_probability_max", [0] * 7)[i],
+                "rain": daily.get("precipitation_probability_max", [0]*7)[i] or 0,
+                "wind": round(daily.get("wind_speed_10m_max", [0]*7)[i] or 0),
             })
         return fc
-    except:
-        return []
-
-
+    except Exception as e:
+        print(f"Forecast error: {e}")
+        days  = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+        today = datetime.now().weekday()
+        return [{"day": "Today" if i==0 else days[(today+i)%7],
+                 "icon":"⛅","condition":"Partly Cloudy",
+                 "high":28,"low":20,"rain":20,"wind":10}
+                for i in range(7)]
 @app.route("/api/preview")
 def api_preview():
     """Fetch live weather for any lat/lon without adding to the city list."""
@@ -3112,10 +3135,11 @@ def api_preview():
 def api_test():
     try:
         r = requests.get(
-            "https://api.open-meteo.com/v1/forecast?latitude=17.69&longitude=83.22&current_weather=true",
+            "https://api.open-meteo.com/v1/forecast?latitude=17.69&longitude=83.22"
+            "&current=temperature_2m,weather_code&timezone=auto",
             timeout=10)
         d = r.json()
-        return jsonify({"status": "✅ API working", "temp": d["current_weather"]["temperature"]})
+        return jsonify({"status": "✅ API working", "temp": d["current"]["temperature_2m"]})
     except Exception as e:
         return jsonify({"status": "❌ API failed", "error": str(e)}), 500
 
