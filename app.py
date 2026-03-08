@@ -1175,7 +1175,10 @@ function updateFeaturedPanel(d) {
   const cLabel = COUNTRY_NAMES[d.country] || d.country || '—';
   document.getElementById('feat-icon').textContent      = safe(d.icon);
   document.getElementById('feat-city').textContent      = safe(d.city);
-  document.getElementById('feat-country').textContent   = cLabel+' · Updated just now';
+  // Use rich subtitle (district/state/country) if provided by map click, else country label
+  const subtitle = d._subtitle || '';
+  const countryLine = subtitle || cLabel;
+  document.getElementById('feat-country').textContent = countryLine + ' · Updated just now';
   document.getElementById('feat-condition').textContent = safe(d.condition)+' — Feels like '+(isCelsius?safe(d.feels_like,'°C'):toF(d.feels_like)+'°F');
   const tempEl = document.getElementById('feat-temp');
   tempEl.textContent = dispTemp(d.temp);
@@ -1562,11 +1565,11 @@ function mapReset() {
 }
 
 // Click anywhere on map to get weather
-function mapClickWeather(lat, lon) {
+async function mapClickWeather(lat, lon) {
   // Remove previous click marker
   if (_clickMarker) { _clickMarker.remove(); _clickMarker = null; }
 
-  // Show loading pin
+  // Show pulsing loading pin on map
   const loadIcon = L.divIcon({
     className: '',
     html: `<div style="width:12px;height:12px;border-radius:50%;background:#e8441a;border:2px solid #fff;animation:mapPulse 1s infinite;"></div>`,
@@ -1574,47 +1577,76 @@ function mapClickWeather(lat, lon) {
   });
   _clickMarker = L.marker([lat, lon], {icon: loadIcon}).addTo(_leafletMap);
 
+  // Show loading in featured panel and scroll to it
   document.getElementById('featured-loading').style.display = 'inline';
   document.querySelector('.featured-section').scrollIntoView({behavior:'smooth', block:'start'});
 
-  // Reverse geocode to get place name, then fetch weather
   const latF = parseFloat(lat), lonF = parseFloat(lon);
   const fallbackName = `${latF.toFixed(2)}°N, ${lonF.toFixed(2)}°E`;
-  fetch(`/api/reverse?lat=${lat}&lon=${lon}`)
-    .then(r => r.json())
-    .then(geo => {
-      const name    = geo.name    || fallbackName;
-      const country = geo.country || '';
-      return fetch(`/api/preview?lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}&country=${encodeURIComponent(country)}`);
-    })
-    .catch(() => fetch(`/api/preview?lat=${lat}&lon=${lon}&name=${encodeURIComponent(fallbackName)}&country=`))
-    .then(r => r.json())
-    .then(d => {
-      updateFeaturedPanel(d);
-      updateForecast(d.city, d.forecast || []);
-      document.getElementById('featured-loading').style.display = 'none';
-      document.querySelectorAll('.city-card').forEach(c => c.classList.remove('selected'));
-      currentCity = null;
-      const badge = document.getElementById('preview-badge');
-      if (badge) badge.style.display = 'inline-flex';
-      // Update click marker to show result
-      if (_clickMarker) {
-        _clickMarker.remove();
-        const doneIcon = L.divIcon({
-          className: '',
-          html: `<div style="width:12px;height:12px;border-radius:50%;background:#4caf50;border:2px solid #fff;"></div>`,
-          iconSize: [12,12], iconAnchor: [6,6],
-        });
-        _clickMarker = L.marker([lat, lon], {icon: doneIcon})
-          .addTo(_leafletMap)
-          .bindTooltip(`📍 ${d.city || name}: ${d.temp}°C`, {direction:'top', offset:[0,-8]})
-          .openTooltip();
-      }
-    })
-    .catch(() => {
-      document.getElementById('featured-loading').style.display = 'none';
-      if (_clickMarker) { _clickMarker.remove(); _clickMarker = null; }
+
+  try {
+    // Step 1: Reverse geocode → get full place name, district, state, country
+    let placeName = fallbackName, country = '', countryCode = '', subtitle = '';
+    try {
+      const geoR = await fetch(`/api/reverse?lat=${lat}&lon=${lon}`);
+      const geo  = await geoR.json();
+      placeName   = geo.name    || fallbackName;
+      country     = geo.country || '';
+      countryCode = geo.country_code || '';
+      // Build a rich subtitle: "District, State · Country"
+      const parts = [];
+      if (geo.district && geo.district !== placeName) parts.push(geo.district);
+      if (geo.state    && geo.state    !== placeName) parts.push(geo.state);
+      subtitle = parts.join(', ');
+      if (country && country !== placeName) subtitle += (subtitle ? ' · ' : '') + country;
+    } catch (_) { /* fallback name already set */ }
+
+    // Step 2: Fetch live weather + 7-day forecast for this location
+    const wxR = await fetch(
+      `/api/preview?lat=${lat}&lon=${lon}` +
+      `&name=${encodeURIComponent(placeName)}` +
+      `&country=${encodeURIComponent(country)}`
+    );
+    const d = await wxR.json();
+
+    // Step 3: Update featured panel with resolved name + subtitle
+    d.city         = placeName;          // use resolved place name
+    d.country      = countryCode || d.country;
+    d._subtitle    = subtitle;           // district/state/country line
+    updateFeaturedPanel(d);
+
+    // Step 4: Update 7-day forecast with full area name
+    updateForecast(placeName, d.forecast || []);
+
+    document.getElementById('featured-loading').style.display = 'none';
+    document.querySelectorAll('.city-card').forEach(c => c.classList.remove('selected'));
+    currentCity = null;
+    const badge = document.getElementById('preview-badge');
+    if (badge) badge.style.display = 'inline-flex';
+
+    // Step 5: Replace loading pin with green done marker
+    if (_clickMarker) { _clickMarker.remove(); _clickMarker = null; }
+    const doneIcon = L.divIcon({
+      className: '',
+      html: `<div style="width:14px;height:14px;border-radius:50%;background:#4caf50;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);"></div>`,
+      iconSize: [14, 14], iconAnchor: [7, 7],
     });
+    _clickMarker = L.marker([lat, lon], {icon: doneIcon})
+      .addTo(_leafletMap)
+      .bindTooltip(
+        `<div style="font-family:monospace;font-size:.68rem;line-height:1.6;">
+          <div style="font-weight:700;">📍 ${placeName}</div>
+          ${subtitle ? `<div style="color:#aaa;font-size:.6rem;">${subtitle}</div>` : ''}
+          <div style="margin-top:3px;">🌡 ${d.temp !== undefined ? dispTemp(d.temp) : '—'} · ${d.condition || '—'}</div>
+        </div>`,
+        {direction: 'top', offset: [0, -10], className: 'leaflet-weather-tooltip'}
+      )
+      .openTooltip();
+
+  } catch (err) {
+    document.getElementById('featured-loading').style.display = 'none';
+    if (_clickMarker) { _clickMarker.remove(); _clickMarker = null; }
+  }
 }
 
 // Map search
@@ -1682,8 +1714,20 @@ if (typeof L !== 'undefined') {
 }
 // ── Forecast ───────────────────────────────────────────────────────────────
 function updateForecast(cityName, fc) {
-  document.getElementById('forecast-label').textContent = '7-Day Outlook · '+cityName;
-  document.getElementById('forecast-strip').innerHTML = (fc||[]).map(d=>`
+  // Update section label with location name
+  const label = document.getElementById('forecast-label');
+  if (label) label.textContent = '7-Day Outlook · ' + (cityName || '—');
+
+  const strip = document.getElementById('forecast-strip');
+  if (!strip) return;
+
+  if (!fc || !fc.length) {
+    strip.innerHTML = `<div style="font-family:monospace;font-size:.68rem;color:#555;padding:20px 0;">
+      No forecast data available for this location.</div>`;
+    return;
+  }
+
+  strip.innerHTML = fc.map(d => `
     <div class="forecast-day">
       <div class="forecast-label">${d.day}</div>
       <div class="forecast-icon">${d.icon}</div>
@@ -1691,7 +1735,8 @@ function updateForecast(cityName, fc) {
       <div class="forecast-lo">${dispTemp(d.low)} lo</div>
       <div class="forecast-rain-bar"><div class="forecast-rain-fill" style="width:${d.rain||0}%"></div></div>
     </div>`).join('');
-  if (typeof twemoji !== 'undefined') twemoji.parse(document.getElementById('forecast-strip'));
+
+  if (typeof twemoji !== 'undefined') twemoji.parse(strip);
 }
 
 // ── Select city ────────────────────────────────────────────────────────────
