@@ -1431,7 +1431,6 @@ function drawChart(points) {
 let _leafletMap       = null;
 let _leafletMarkers   = [];
 let _lastWeatherList  = [];   // persists across zoom re-renders
-let _onMapZoom        = null;  // zoomend handler ref
 let _mapSearchTimer   = null;
 let _mapSearchResults = [];
 let _clickMarker      = null;
@@ -1531,9 +1530,15 @@ function setMapView(viewKey) {
   const v = MAP_VIEWS[viewKey];
   _currentTileLayer = L.tileLayer(v.url, v.opts).addTo(_leafletMap);
 
-  // Bring markers back to front
-  _leafletMarkers.forEach(m => m.addTo(_leafletMap));
-  if (_clickMarker) _clickMarker.addTo(_leafletMap);
+  // Ensure marker layer group is on top of new tile layer
+  if (_markerLayer) {
+    _markerLayer.remove();
+    _markerLayer.addTo(_leafletMap);
+  }
+  if (_clickMarker) {
+    _clickMarker.remove();
+    _clickMarker.addTo(_leafletMap);
+  }
 
   // Update active button
   _currentView = viewKey;
@@ -1542,80 +1547,93 @@ function setMapView(viewKey) {
   if (btn) btn.classList.add('active');
 }
 
+// ── Marker layer group — keeps markers alive through tile swaps and zooms ──
+let _markerLayer = null;
+
+function _ensureMarkerLayer() {
+  if (!_markerLayer) {
+    _markerLayer = L.layerGroup().addTo(_leafletMap);
+  }
+}
+
 function renderMapDots(weatherList) {
   if (typeof L === 'undefined') {
     setTimeout(() => renderMapDots(weatherList), 300);
     return;
   }
   if (!_leafletMap) initLeafletMap();
+  _ensureMarkerLayer();
 
-  // Clear existing markers
-  _leafletMarkers.forEach(m => m.remove());
+  // Persist list — pass null on zoom re-renders to reuse last list
+  if (weatherList && weatherList.length) _lastWeatherList = weatherList;
+  const list = _lastWeatherList;
+  if (!list || !list.length) return;
+
+  // Clear the layer group (markers detach cleanly, no map flicker)
+  _markerLayer.clearLayers();
   _leafletMarkers = [];
-
-  // Close any open popups
-  _leafletMap.closePopup();
 
   const zoom = _leafletMap.getZoom();
 
-  weatherList.forEach(w => {
-    if (!w.lat || !w.lon) return;
-    const color  = tempColor(w.temp);
-    const temp   = w.temp !== undefined ? Math.round(w.temp) : '—';
-    // Scale dot size with zoom level — bigger when zoomed in
-    const base   = zoom >= 7 ? 40 : zoom >= 5 ? 32 : zoom >= 4 ? 26 : 20;
-    const border = 2;
+  list.forEach(w => {
+    if (w.lat == null || w.lon == null) return;
+    const color    = tempColor(w.temp);
+    const temp     = w.temp !== undefined ? Math.round(w.temp) : '—';
+    const safeCity = (w.city || '').replace(/'/g, "&#39;");
 
-    // Pulsing dot with temperature label inside
+    // Dot size scales with zoom level
+    const size      = zoom >= 10 ? 44 : zoom >= 7 ? 36 : zoom >= 5 ? 28 : zoom >= 4 ? 22 : 16;
+    const fontSize  = size >= 36 ? '.62rem' : size >= 28 ? '.56rem' : '.48rem';
+    const showLabel = size >= 22;
+    const border    = size >= 28 ? 2.5 : 1.5;
+
     const icon = L.divIcon({
       className: '',
       html: `<div style="
-          width:${base}px;height:${base}px;border-radius:50%;
-          background:${color};border:${border}px solid rgba(255,255,255,.85);
-          box-shadow:0 2px 10px rgba(0,0,0,.45),0 0 0 0 ${color};
-          animation:mapPulse 3s ease-in-out infinite;
+          width:${size}px;height:${size}px;border-radius:50%;
+          background:${color};
+          border:${border}px solid rgba(255,255,255,.85);
+          box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 0 1px ${color}44;
           display:flex;align-items:center;justify-content:center;
-          position:relative;cursor:pointer;">
-          <span style="
-            font-family:monospace;font-weight:700;
-            font-size:${base>=32?'.65rem':'.52rem'};
-            color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);
-            line-height:1;letter-spacing:-.3px;pointer-events:none;">${temp}°</span>
+          position:relative;cursor:pointer;user-select:none;
+          animation:mapPulse 3s ease-in-out infinite;">
+          ${showLabel ? `<span style="
+            font-family:monospace;font-weight:700;font-size:${fontSize};
+            color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);
+            line-height:1;pointer-events:none;">${temp}°</span>` : ''}
           <div style="
-            position:absolute;top:50%;left:50%;
-            transform:translate(-50%,-50%);
-            width:${base+10}px;height:${base+10}px;border-radius:50%;
-            border:1.5px solid ${color};opacity:.35;
+            position:absolute;inset:-6px;border-radius:50%;
+            border:1px solid ${color};opacity:.25;
             animation:mapRing 3s ease-in-out infinite;
             pointer-events:none;"></div>
         </div>`,
-      iconSize:   [base, base],
-      iconAnchor: [base/2, base/2],
+      iconSize:   [size, size],
+      iconAnchor: [size/2, size/2],
     });
 
-    // Rich tooltip on hover
     const tooltipHtml = `
       <div style="font-family:monospace;font-size:.68rem;line-height:1.75;min-width:170px;">
         <div style="font-weight:700;font-size:.8rem;margin-bottom:5px;color:${color};">
-          ${w.icon||'🌡️'} ${w.city}
+          ${w.icon||'&#x1F321;'} ${w.city}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;">
-          <div>🌡 ${temp}°C</div><div>🤔 ${w.feels_like!==undefined?Math.round(w.feels_like)+'°C':'—'}</div>
-          <div>💧 ${w.humidity||'—'}%</div><div>💨 ${w.wind_speed||'—'} km/h</div>
-          <div>☀️ UV ${w.uv_index||'—'}</div><div>🌧 ${w.rain_prob||0}%</div>
+          <div>Temp: ${temp}°C</div>
+          <div>Feels: ${w.feels_like!==undefined?Math.round(w.feels_like)+'°C':'—'}</div>
+          <div>Humidity: ${w.humidity||'—'}%</div>
+          <div>Wind: ${w.wind_speed||'—'} km/h</div>
+          <div>UV: ${w.uv_index||'—'}</div>
+          <div>Rain: ${w.rain_prob||0}%</div>
         </div>
-        <div style="margin-top:5px;padding-top:4px;border-top:1px solid rgba(255,255,255,.1);
+        <div style="margin-top:5px;padding-top:4px;border-top:1px solid rgba(255,255,255,.12);
           color:${w.aqi_color||'#4caf50'};font-size:.6rem;">
           AQI ${w.aqi||'—'} · ${w.aqi_label||'—'}
         </div>
-        <div style="color:#555;font-size:.56rem;margin-top:3px;">Click for full details →</div>
       </div>`;
 
-    // Popup on click — mini weather card
     const popupHtml = `
       <div style="font-family:monospace;font-size:.68rem;line-height:1.8;min-width:200px;padding:2px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span style="font-size:1.6rem;">${w.icon||'🌡️'}</span>
+          <span style="font-size:1.6rem;">${w.icon||'&#x1F321;'}</span>
           <div>
             <div style="font-weight:700;font-size:.85rem;color:${color};">${w.city}</div>
             <div style="color:#aaa;font-size:.6rem;">${w.condition||'—'}</div>
@@ -1625,60 +1643,59 @@ function renderMapDots(weatherList) {
           ${temp}°C
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;font-size:.62rem;color:#ccc;">
-          <div>💧 Humidity: ${w.humidity||'—'}%</div>
-          <div>💨 Wind: ${w.wind_speed||'—'} km/h</div>
-          <div>🌅 Sunrise: ${w.sunrise||'—'}</div>
-          <div>🌇 Sunset: ${w.sunset||'—'}</div>
-          <div>☀️ UV Index: ${w.uv_index||'—'}</div>
-          <div>🌧 Rain: ${w.rain_prob||0}%</div>
+          <div>Humidity: ${w.humidity||'—'}%</div>
+          <div>Wind: ${w.wind_speed||'—'} km/h</div>
+          <div>Sunrise: ${w.sunrise||'—'}</div>
+          <div>Sunset: ${w.sunset||'—'}</div>
+          <div>UV: ${w.uv_index||'—'}</div>
+          <div>Rain: ${w.rain_prob||0}%</div>
         </div>
         <div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,.1);
           display:flex;align-items:center;justify-content:space-between;">
-          <span style="color:${w.aqi_color||'#4caf50'};font-size:.6rem;">AQI ${w.aqi||'—'} · ${w.aqi_label||'—'}</span>
-          <button onclick="selectCity('${w.city.replace(/'/g,"\\'")}');_leafletMap.closePopup();"
+          <span style="color:${w.aqi_color||'#4caf50'};font-size:.6rem;">
+            AQI ${w.aqi||'—'} · ${w.aqi_label||'—'}
+          </span>
+          <button onclick="selectCity('${safeCity}');_leafletMap.closePopup();"
             style="background:${color};border:none;color:#fff;padding:3px 10px;
               font-family:monospace;font-size:.58rem;border-radius:3px;cursor:pointer;
-              letter-spacing:.5px;font-weight:700;">SELECT →</button>
+              font-weight:700;">SELECT</button>
         </div>
       </div>`;
 
-    const marker = L.marker([w.lat, w.lon], {icon, zIndexOffset: Math.round(w.temp||0)*10})
-      .addTo(_leafletMap)
+    const marker = L.marker([w.lat, w.lon], {
+        icon,
+        zIndexOffset: Math.round((w.temp || 0) * 10),
+      })
       .bindTooltip(tooltipHtml, {
         direction: 'top',
-        offset:    [0, -(base/2+4)],
+        offset:    [0, -(size / 2 + 4)],
         className: 'leaflet-weather-tooltip',
         sticky:    false,
       })
       .bindPopup(popupHtml, {
         className:   'leaflet-weather-popup',
         maxWidth:    240,
-        offset:      [0, -(base/2)],
+        offset:      [0, -(size / 2)],
         closeButton: true,
       })
-      .on('click', function() {
-        this.openPopup();
-      });
+      .on('click', function() { this.openPopup(); });
 
+    _markerLayer.addLayer(marker);
     _leafletMarkers.push(marker);
   });
 
-  // Persist list so zoomend can re-render without relying on markers
-  _lastWeatherList = weatherList;
-
-  // Re-render on zoom so marker sizes update — reads from _lastWeatherList, not markers
-  _leafletMap.off('zoomend', _onMapZoom);
-  _leafletMap.on('zoomend', _onMapZoom = function() {
-    if (_lastWeatherList.length) renderMapDots(_lastWeatherList);
-  });
+  // Register zoomend once — re-renders markers with new size
+  if (!_onMapZoom) {
+    _onMapZoom = function() { renderMapDots(null); };
+    _leafletMap.on('zoomend', _onMapZoom);
+  }
 }
-
 
 // Fit map to show all city markers
 function mapFitAll() {
   if (!_leafletMap || !_leafletMarkers.length) return;
   const group = L.featureGroup(_leafletMarkers);
-  _leafletMap.fitBounds(group.getBounds().pad(0.08), {maxZoom: 6});
+  _leafletMap.fitBounds(group.getBounds().pad(0.1), { animate: true });
 }
 
 // Fly to user's GPS location
