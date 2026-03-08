@@ -498,6 +498,10 @@ body.dark .chart-outer{background:#1a1a24;}
 @keyframes mapRing{0%{transform:translate(-50%,-50%) scale(1);opacity:.4;}100%{transform:translate(-50%,-50%) scale(2);opacity:0;}}
 .map-outer{background:#050d1a;border:2px solid var(--border);overflow:hidden;position:relative;}
 .map-toolbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:rgba(0,0,0,.4);border-bottom:1px solid rgba(255,255,255,.06);flex-wrap:wrap;gap:8px;}
+.map-view-btns{display:flex;gap:4px;flex-wrap:wrap;}
+.map-view-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#aaa;padding:5px 11px;font-family:monospace;font-size:.63rem;letter-spacing:.4px;border-radius:4px;cursor:pointer;transition:all .18s;white-space:nowrap;}
+.map-view-btn:hover{background:rgba(232,68,26,.15);border-color:rgba(232,68,26,.4);color:#e8441a;}
+.map-view-btn.active{background:rgba(232,68,26,.22);border-color:#e8441a;color:#f2ede6;font-weight:600;}
 .map-legend{display:flex;gap:14px;align-items:center;}
 .map-legend-item{display:flex;align-items:center;gap:6px;font-family:'Space Mono',monospace;font-size:.58rem;color:#aaa;letter-spacing:.5px;}
 .map-legend-dot{width:10px;height:10px;border-radius:50%;}
@@ -780,34 +784,45 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 <section class="map-section">
   <div class="section-label">🗺️ World Weather Map</div>
   <div class="map-outer">
-    <div class="map-toolbar">
+    <div class="map-toolbar" style="flex-direction:column;align-items:stretch;gap:10px;">
+      <!-- Row 1: view toggles + search + zoom -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div class="map-view-btns">
+          <button class="map-view-btn active" onclick="setMapView('dark')"      id="mv-dark">🌑 Dark</button>
+          <button class="map-view-btn"        onclick="setMapView('satellite')" id="mv-satellite">🛰️ Satellite</button>
+          <button class="map-view-btn"        onclick="setMapView('street')"    id="mv-street">🗺️ Street</button>
+          <button class="map-view-btn"        onclick="setMapView('topo')"      id="mv-topo">⛰️ Terrain</button>
+          <button class="map-view-btn"        onclick="setMapView('light')"     id="mv-light">☀️ Light</button>
+          <button class="map-view-btn"        onclick="setMapView('watercolor')" id="mv-watercolor">🎨 Watercolor</button>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <div style="position:relative;">
+            <input id="map-search-input" type="text" placeholder="Search location..."
+              style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
+                     color:#f2ede6;padding:6px 32px 6px 12px;font-family:monospace;font-size:.68rem;
+                     border-radius:4px;outline:none;width:200px;letter-spacing:.5px;"
+              oninput="mapSearchDebounce(this.value)"
+              onkeydown="if(event.key==='Enter') mapSearchGo()">
+            <button onclick="mapSearchGo()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);
+              background:none;border:none;color:#e8441a;cursor:pointer;font-size:.85rem;">🔍</button>
+            <div id="map-search-results" style="display:none;position:absolute;top:100%;left:0;right:0;
+              background:#1a1a22;border:1px solid rgba(255,255,255,.12);border-radius:4px;
+              z-index:2000;max-height:200px;overflow-y:auto;margin-top:2px;"></div>
+          </div>
+          <div class="map-zoom-btns">
+            <button class="map-zoom-btn" onclick="_leafletMap && _leafletMap.zoomIn()" title="Zoom in">+</button>
+            <button class="map-zoom-btn" onclick="_leafletMap && _leafletMap.zoomOut()" title="Zoom out">−</button>
+            <button class="map-zoom-btn" onclick="mapReset()" title="Reset view">⌂</button>
+          </div>
+        </div>
+      </div>
+      <!-- Row 2: temperature legend -->
       <div class="map-legend">
         <div class="map-legend-item"><div class="map-legend-dot" style="background:#f44336;"></div>&gt;35°C</div>
         <div class="map-legend-item"><div class="map-legend-dot" style="background:#ff9800;"></div>26–35°C</div>
         <div class="map-legend-item"><div class="map-legend-dot" style="background:#4caf50;"></div>16–25°C</div>
         <div class="map-legend-item"><div class="map-legend-dot" style="background:#2196f3;"></div>6–15°C</div>
         <div class="map-legend-item"><div class="map-legend-dot" style="background:#9c27b0;"></div>&lt;6°C</div>
-      </div>
-      <!-- Map search box -->
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <div style="position:relative;">
-          <input id="map-search-input" type="text" placeholder="Search location on map..."
-            style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
-                   color:#f2ede6;padding:6px 36px 6px 12px;font-family:monospace;font-size:.68rem;
-                   border-radius:4px;outline:none;width:220px;letter-spacing:.5px;"
-            oninput="mapSearchDebounce(this.value)"
-            onkeydown="if(event.key==='Enter') mapSearchGo()">
-          <button onclick="mapSearchGo()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);
-            background:none;border:none;color:#e8441a;cursor:pointer;font-size:.9rem;">🔍</button>
-          <div id="map-search-results" style="display:none;position:absolute;top:100%;left:0;right:0;
-            background:#1a1a22;border:1px solid rgba(255,255,255,.12);border-radius:4px;
-            z-index:2000;max-height:200px;overflow-y:auto;margin-top:2px;"></div>
-        </div>
-        <div class="map-zoom-btns">
-          <button class="map-zoom-btn" onclick="_leafletMap && _leafletMap.zoomIn()" title="Zoom in">+</button>
-          <button class="map-zoom-btn" onclick="_leafletMap && _leafletMap.zoomOut()" title="Zoom out">−</button>
-          <button class="map-zoom-btn" onclick="mapReset()" title="Reset view">⌂</button>
-        </div>
       </div>
     </div>
     <!-- Leaflet map container -->
@@ -1405,6 +1420,37 @@ function tempColor(t) {
   return '#9c27b0';
 }
 
+// ── Map tile layer definitions (all free, no API key) ─────────────────────
+const MAP_VIEWS = {
+  dark: {
+    url:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    opts: { subdomains: 'abcd', maxZoom: 19 },
+  },
+  satellite: {
+    url:  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    opts: { maxZoom: 19 },
+  },
+  street: {
+    url:  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    opts: { subdomains: 'abc', maxZoom: 19 },
+  },
+  topo: {
+    url:  'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    opts: { subdomains: 'abc', maxZoom: 17 },
+  },
+  light: {
+    url:  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    opts: { subdomains: 'abcd', maxZoom: 19 },
+  },
+  watercolor: {
+    url:  'https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg',
+    opts: { maxZoom: 16 },
+  },
+};
+
+let _currentTileLayer = null;
+let _currentView      = 'dark';
+
 function initLeafletMap() {
   if (_leafletMap || typeof L === 'undefined') return;
 
@@ -1412,23 +1458,41 @@ function initLeafletMap() {
     center: [20, 0],
     zoom: 2,
     minZoom: 2,
-    maxZoom: 18,
-    zoomControl: false,   // we use custom buttons
+    maxZoom: 19,
+    zoomControl: false,
     attributionControl: false,
   });
 
-  // Dark OpenStreetMap tile layer (free, no key)
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd',
-    maxZoom: 19,
-  }).addTo(_leafletMap);
+  // Load default dark tile layer
+  const v = MAP_VIEWS['dark'];
+  _currentTileLayer = L.tileLayer(v.url, v.opts).addTo(_leafletMap);
 
-  // Click on map → fetch weather for that location
+  // Click anywhere → fetch weather at that point
   _leafletMap.on('click', function(e) {
     const lat = e.latlng.lat.toFixed(5);
     const lon = e.latlng.lng.toFixed(5);
     mapClickWeather(lat, lon);
   });
+}
+
+function setMapView(viewKey) {
+  if (!MAP_VIEWS[viewKey]) return;
+  if (!_leafletMap) initLeafletMap();
+
+  // Swap tile layer
+  if (_currentTileLayer) _leafletMap.removeLayer(_currentTileLayer);
+  const v = MAP_VIEWS[viewKey];
+  _currentTileLayer = L.tileLayer(v.url, v.opts).addTo(_leafletMap);
+
+  // Bring markers back to front
+  _leafletMarkers.forEach(m => m.addTo(_leafletMap));
+  if (_clickMarker) _clickMarker.addTo(_leafletMap);
+
+  // Update active button
+  _currentView = viewKey;
+  document.querySelectorAll('.map-view-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('mv-' + viewKey);
+  if (btn) btn.classList.add('active');
 }
 
 function renderMapDots(weatherList) {
@@ -1505,15 +1569,17 @@ function mapClickWeather(lat, lon) {
   document.getElementById('featured-loading').style.display = 'inline';
   document.querySelector('.featured-section').scrollIntoView({behavior:'smooth', block:'start'});
 
-  // Reverse geocode to get place name
-  fetch(`/api/geocode?q=${lat},${lon}`)
+  // Reverse geocode to get place name, then fetch weather
+  const latF = parseFloat(lat), lonF = parseFloat(lon);
+  const fallbackName = `${latF.toFixed(2)}°N, ${lonF.toFixed(2)}°E`;
+  fetch(`/api/reverse?lat=${lat}&lon=${lon}`)
     .then(r => r.json())
     .then(geo => {
-      const name    = geo.results?.[0]?.name    || `${parseFloat(lat).toFixed(2)}°N, ${parseFloat(lon).toFixed(2)}°E`;
-      const country = geo.results?.[0]?.country_name || '';
-      // Get weather
+      const name    = geo.name    || fallbackName;
+      const country = geo.country || '';
       return fetch(`/api/preview?lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}&country=${encodeURIComponent(country)}`);
     })
+    .catch(() => fetch(`/api/preview?lat=${lat}&lon=${lon}&name=${encodeURIComponent(fallbackName)}&country=`))
     .then(r => r.json())
     .then(d => {
       updateFeaturedPanel(d);
@@ -2285,6 +2351,10 @@ function autoRefresh() {
         drawChart(histData[currentCity]);
       }
     }
+
+    // Refresh map markers with latest temps/conditions
+    if (_leafletMap) renderMapDots(data.weather);
+
   }).catch(()=>{});
 }
 
@@ -2437,6 +2507,42 @@ def city_api(city_name):
     # Live fallback
     result = fetch_single_city(city_name, coords)
     return jsonify({**result, "forecast": forecast})
+
+@app.route("/api/reverse")
+def reverse_geocode():
+    """Reverse geocode lat/lon to a place name using Nominatim."""
+    lat = request.args.get("lat", "").strip()
+    lon = request.args.get("lon", "").strip()
+    if not lat or not lon:
+        return jsonify({"error": "Missing lat/lon"}), 400
+    try:
+        r = requests.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"lat": lat, "lon": lon, "format": "json",
+                    "zoom": 14, "addressdetails": 1, "accept-language": "en"},
+            headers={"User-Agent": "AHOY WeatherDrift/2.0 (weather app)"},
+            timeout=8
+        )
+        data = r.json()
+        addr = data.get("address", {})
+        name = (
+            addr.get("hamlet") or addr.get("village") or
+            addr.get("suburb") or addr.get("town") or
+            addr.get("city_district") or addr.get("city") or
+            addr.get("county") or data.get("name") or
+            f"{float(lat):.2f}°N, {float(lon):.2f}°E"
+        )
+        country      = addr.get("country", "")
+        country_code = addr.get("country_code", "").upper()
+        state        = addr.get("state", "")
+        district     = addr.get("state_district") or addr.get("county", "")
+        return jsonify({"name": name, "country": country,
+                        "country_code": country_code,
+                        "state": state, "district": district})
+    except Exception as e:
+        return jsonify({"name": f"{float(lat):.2f}°N, {float(lon):.2f}°E",
+                        "country": "", "error": str(e)})
+
 
 @app.route("/api/geocode")
 def geocode():
