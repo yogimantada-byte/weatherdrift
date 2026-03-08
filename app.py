@@ -1,14 +1,43 @@
 from flask import Flask, render_template_string, jsonify, request
-import requests, json, random, time, threading, math
+import requests, json, random, time, threading, math, os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
+# ── Persistence file (survives restarts) ────────────────────────────────────
+DATA_FILE = os.path.join(os.path.dirname(__file__), "city_data.json")
+
+def _load_data():
+    """Load custom cities and deleted city names from disk."""
+    global _custom_cities, _deleted_cities
+    if os.path.exists(DATA_FILE):
+        try:
+            d = json.load(open(DATA_FILE))
+            _custom_cities  = d.get("custom_cities",  {})
+            _deleted_cities = set(d.get("deleted_cities", []))
+        except Exception:
+            pass
+
+def _save_data():
+    """Persist custom cities and deleted city names to disk."""
+    try:
+        json.dump(
+            {"custom_cities": _custom_cities,
+             "deleted_cities": list(_deleted_cities)},
+            open(DATA_FILE, "w"), indent=2
+        )
+    except Exception:
+        pass
+
 # ── Cache ───────────────────────────────────────────────────────────────────
 _cache = {"weather": None, "timestamp": 0, "last_updated": "Never"}
-_custom_cities = {}   # user-added cities stored in memory
+_custom_cities  = {}   # user-added cities (persisted to disk)
+_deleted_cities = set()  # built-in cities hidden by user (persisted to disk)
 REFRESH_INTERVAL = 60
+
+# Load persisted data on startup
+_load_data()
 
 CITIES = {
     "Mumbai":          {"lat": 19.08,  "lon": 72.88,  "country": "IN"},
@@ -177,7 +206,9 @@ def fetch_single_city(city, coords):
     }
 
 def get_all_cities():
-    return {**CITIES, **_custom_cities}
+    """Return all active cities — built-ins minus deleted ones, plus custom additions."""
+    active = {k: v for k, v in CITIES.items() if k not in _deleted_cities}
+    return {**active, **_custom_cities}
 
 def get_weather_data():
     all_c = get_all_cities()
@@ -399,6 +430,9 @@ body.dark .city-card{background:#1e1e2a;}
 .city-card:hover .city-country,.city-card:hover .city-condition,.city-card:hover .card-stat-label{color:#ccc!important;}
 .city-card:hover .card-stat-value{color:#fff!important;}
 .city-card:hover .card-stats{border-color:rgba(255,255,255,.12)!important;}
+.city-delete-btn{position:absolute;top:8px;right:8px;background:rgba(244,67,54,.15);border:1px solid rgba(244,67,54,.4);color:#f44336;width:24px;height:24px;border-radius:50%;font-size:.7rem;cursor:pointer;display:none;align-items:center;justify-content:center;z-index:20;transition:all .2s;line-height:1;}
+.city-card:hover .city-delete-btn{display:flex;}
+.city-delete-btn:hover{background:rgba(244,67,54,.85);color:#fff;border-color:#f44336;transform:scale(1.15);}
 .city-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;}
 .city-name{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:2px;color:#0a0a0f;transition:color .2s;}
 body.dark .city-name{color:#f0ede8;}
@@ -948,6 +982,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
   <div class="city-grid" id="grid-{{ group.code }}">
     {% for w in group.cities %}
     <div class="city-card" onclick="selectCity(this.dataset.city)" data-city="{{ w.city }}" data-temp-c="{{ w.temp }}" data-country="{{ w.country }}">
+      <button class="city-delete-btn" onclick="event.stopPropagation();deleteCity(this.closest('.city-card').dataset.city)" title="Remove city">✕</button>
       <div class="city-header">
         <div>
           <div class="city-name">{{ w.city }}</div>
@@ -975,6 +1010,15 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 </section>
 
 <!-- ADD CUSTOM CITY -->
+<!-- RESTORE CITIES -->
+<section class="add-city-section" id="restore-section" style="margin-top:60px;display:none;">
+  <div class="section-label">♻️ Restore Removed Cities</div>
+  <div style="background:var(--card-bg);border:2px solid var(--border);padding:24px;">
+    <div id="restore-list" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+    <div id="restore-empty" style="font-family:monospace;font-size:.7rem;color:#666;">No cities have been removed.</div>
+  </div>
+</section>
+
 <section class="add-city-section" style="margin-top:60px;">
   <div class="section-label">➕ Add Location</div>
   <div style="background:var(--card-bg);border:2px solid var(--border);padding:30px;">
@@ -2025,6 +2069,7 @@ function renderNewCityCard(w, countryCode, countryName) {
   card.setAttribute('data-country', countryCode);
   card.onclick = ()=>selectCity(w.city);
   card.innerHTML=`
+    <button class="city-delete-btn" onclick="event.stopPropagation();deleteCity('${w.city}')" title="Remove city">✕</button>
     <div class="city-header">
       <div><div class="city-name">${w.city}</div><div class="city-country">${countryName}</div></div>
       <div class="city-icon">${w.icon}</div>
@@ -2082,6 +2127,91 @@ function renderNewCityCard(w, countryCode, countryName) {
 }
 
 // ── Share ──────────────────────────────────────────────────────────────────
+function deleteCity(cityName) {
+  if (!confirm(`Remove "${cityName}" from the dashboard?`)) return;
+
+  // Optimistically remove card from DOM
+  const card = document.querySelector(`.city-card[data-city="${cityName}"]`);
+  if (card) {
+    card.style.transition = 'opacity .3s, transform .3s';
+    card.style.opacity = '0';
+    card.style.transform = 'scale(.9)';
+    setTimeout(() => {
+      const grid = card.closest('.city-grid');
+      card.remove();
+      // Remove country section if grid is now empty
+      if (grid && grid.querySelectorAll('.city-card').length === 0) {
+        const section = grid.closest('section[data-country-name]');
+        if (section) section.remove();
+      }
+    }, 300);
+  }
+
+  // Remove from allCities array
+  const idx = allCities.findIndex(c => c.city === cityName);
+  if (idx !== -1) allCities.splice(idx, 1);
+
+  // If this was the selected city, clear featured panel
+  if (currentCity === cityName) {
+    currentCity = null;
+    document.getElementById('feat-city').textContent = '—';
+  }
+
+  // Tell backend to remove from cache + custom cities
+  fetch('/api/remove-city', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: cityName})
+  })
+  .then(() => loadRestorePanel())  // show restore panel immediately
+  .catch(() => {});
+}
+
+// ── Restore deleted cities ────────────────────────────────────────────────
+function loadRestorePanel() {
+  fetch('/api/deleted-cities')
+    .then(r => r.json())
+    .then(data => {
+      const deleted = data.deleted || [];
+      const section = document.getElementById('restore-section');
+      const list    = document.getElementById('restore-list');
+      const empty   = document.getElementById('restore-empty');
+      if (!deleted.length) {
+        section.style.display = 'none';
+        return;
+      }
+      section.style.display = 'block';
+      empty.style.display = deleted.length ? 'none' : 'block';
+      const flagMap = {IN:'🇮🇳',JP:'🇯🇵',RU:'🇷🇺',ZA:'🇿🇦'};
+      list.innerHTML = deleted.map(d => `
+        <button onclick="restoreCity('${d.name}')" style="
+          display:inline-flex;align-items:center;gap:6px;
+          background:rgba(76,175,80,.12);border:1px solid rgba(76,175,80,.4);
+          color:#4caf50;padding:6px 14px;border-radius:4px;cursor:pointer;
+          font-family:monospace;font-size:.68rem;letter-spacing:.5px;transition:all .2s;">
+          ${flagMap[d.country]||'🌍'} ${d.name} <span style="color:#888;font-size:.6rem;">↩ Restore</span>
+        </button>`).join('');
+    })
+    .catch(() => {});
+}
+
+function restoreCity(name) {
+  fetch('/api/restore-city', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name})
+  })
+  .then(r => r.json())
+  .then(() => {
+    // Reload page to re-fetch and show restored city
+    window.location.reload();
+  })
+  .catch(() => {});
+}
+
+// Load restore panel on page load
+loadRestorePanel();
+
 function shareWhatsApp() {
   const city=document.getElementById('feat-city').textContent;
   const temp=document.getElementById('feat-temp').textContent;
@@ -2539,6 +2669,55 @@ def api_hierarchy():
         return jsonify({"error": str(e), "results": []}), 500
 
 
+@app.route("/api/remove-city", methods=["POST"])
+def remove_city():
+    """Permanently hide a city — survives server restarts."""
+    global _custom_cities, _deleted_cities
+    data = request.get_json()
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Missing name"}), 400
+
+    # Remove from custom cities if user-added
+    _custom_cities.pop(name, None)
+
+    # Add to deleted set (covers built-in cities too)
+    _deleted_cities.add(name)
+
+    # Remove from live weather cache
+    if _cache["weather"]:
+        _cache["weather"] = [w for w in _cache["weather"] if w["city"] != name]
+
+    # Persist to disk so deletion survives restart
+    _save_data()
+
+    return jsonify({"success": True, "removed": name})
+
+
+@app.route("/api/restore-city", methods=["POST"])
+def restore_city():
+    """Un-delete a previously removed city."""
+    global _deleted_cities
+    data = request.get_json()
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Missing name"}), 400
+    _deleted_cities.discard(name)
+    _save_data()
+    return jsonify({"success": True, "restored": name})
+
+
+@app.route("/api/deleted-cities")
+def list_deleted():
+    """Return list of deleted built-in cities (for restore UI)."""
+    deleted = [
+        {"name": n, "country": CITIES[n]["country"]}
+        for n in sorted(_deleted_cities)
+        if n in CITIES   # only show built-ins, not removed custom cities
+    ]
+    return jsonify({"deleted": deleted})
+
+
 @app.route("/api/add-city", methods=["POST"])
 def add_city():
     global _custom_cities
@@ -2570,6 +2749,7 @@ def add_city():
         _cache["weather"].append(result)
     else:
         _cache["weather"] = [result]
+    _save_data()  # persist new custom city to disk
     return jsonify({"success": True, "city": name, "weather": result, "country_name": country_name})
 
 
