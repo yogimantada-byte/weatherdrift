@@ -1428,11 +1428,13 @@ function drawChart(points) {
 
 // ── World Map ──────────────────────────────────────────────────────────────
 // ── Leaflet Map ───────────────────────────────────────────────────────────
-let _leafletMap    = null;
-let _leafletMarkers = [];
-let _mapSearchTimer = null;
+let _leafletMap       = null;
+let _leafletMarkers   = [];
+let _lastWeatherList  = [];   // persists across zoom re-renders
+let _onMapZoom        = null;  // zoomend handler ref
+let _mapSearchTimer   = null;
 let _mapSearchResults = [];
-let _clickMarker   = null;
+let _clickMarker      = null;
 
 function tempColor(t) {
   if (t > 35) return '#f44336';
@@ -1661,22 +1663,16 @@ function renderMapDots(weatherList) {
     _leafletMarkers.push(marker);
   });
 
-  // Re-render on zoom so marker sizes update
-  _leafletMap.off('zoomend', _onMapZoom);
-  _leafletMap.on('zoomend',  _onMapZoom = function() {
-    if (_leafletMarkers.length) renderMapDots(
-      _leafletMarkers.map(m => m._weatherData).filter(Boolean)
-    );
-  });
+  // Persist list so zoomend can re-render without relying on markers
+  _lastWeatherList = weatherList;
 
-  // Attach weather data to each marker for zoom re-render
-  _leafletMarkers.forEach((m, i) => {
-    if (weatherList[i]) m._weatherData = weatherList[i];
+  // Re-render on zoom so marker sizes update — reads from _lastWeatherList, not markers
+  _leafletMap.off('zoomend', _onMapZoom);
+  _leafletMap.on('zoomend', _onMapZoom = function() {
+    if (_lastWeatherList.length) renderMapDots(_lastWeatherList);
   });
 }
 
-// Zoom-end handler reference (so we can remove/re-add cleanly)
-let _onMapZoom = null;
 
 // Fit map to show all city markers
 function mapFitAll() {
