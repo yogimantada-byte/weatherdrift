@@ -1144,44 +1144,54 @@ function handleSearch(q) {
   if (!q || !q.trim()) { box.style.display='none'; return; }
   box.style.display='block';
 
-  // Instant local matches from already-loaded cities
   const ql = q.toLowerCase();
   const local = allCities.filter(c => c.city && c.city.toLowerCase().includes(ql)).slice(0, 4);
-  const localHtml = () => local.map(c=>`
-    <div class="search-result-item" onclick="selectCity('${c.city.replace(/'/g,"\\'")}');document.getElementById('city-search').value='';document.getElementById('search-results').style.display='none';">
-      <span>⭐ ${c.city}</span><span style="color:#aaa;font-size:.62rem;">${c.temp!==undefined?dispTemp(c.temp):''}</span>
-    </div>`).join('');
+
+  const localHtml = () => local.map(c => {
+    const flag = {IN:'🇮🇳',JP:'🇯🇵',RU:'🇷🇺',ZA:'🇿🇦'}[c.country] || '🌍';
+    return `<div class="search-result-item" onclick="selectCity(this.dataset.city);document.getElementById('city-search').value='';document.getElementById('search-results').style.display='none';" data-city="${c.city}">
+      <span>${flag} ${c.city}</span>
+      <span style="color:#e8441a;font-size:.62rem;font-weight:700;">${c.temp!==undefined ? dispTemp(c.temp) : ''}</span>
+    </div>`;
+  }).join('');
 
   box.innerHTML = (local.length ? localHtml() : '') +
-    `<div style="padding:6px 14px;font-family:monospace;font-size:.6rem;color:#555;border-top:1px solid rgba(255,255,255,.05);">🌍 Searching worldwide...</div>`;
+    `<div style="padding:6px 14px;font-family:monospace;font-size:.6rem;color:#555;border-top:1px solid rgba(255,255,255,.05);">🔍 Searching...</div>`;
 
-  _searchTimer = setTimeout(()=>{
-    fetch('/api/geocode?q='+encodeURIComponent(q))
-      .then(r=>r.json())
-      .then(data=>{
+  _searchTimer = setTimeout(() => {
+    fetch('/api/geocode?q=' + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(data => {
         _searchResults = data.results || [];
-        const sep = local.length && _searchResults.length
-          ? `<div style="padding:4px 14px;font-family:monospace;font-size:.58rem;color:#444;background:rgba(255,255,255,.03);letter-spacing:1px;">— WORLDWIDE —</div>`
+        const TYPE_COLOR = {'City':'#e8441a','Town':'#ff9800','Village':'#4caf50','Hamlet':'#66bb6a','Suburb':'#2196f3','Locality':'#00bcd4','Neighbourhood':'#9c27b0','Municipality':'#ff9800'};
+        const TYPE_ICON  = {'City':'🏙️','Town':'🏘️','Village':'🏡','Hamlet':'🛖','Suburb':'🏠','Locality':'📍','Neighbourhood':'🏘️'};
+        const globalResults = _searchResults.filter(r => !local.some(l => l.city.toLowerCase() === r.name.toLowerCase())).slice(0, 7);
+        const globalHtml = globalResults.map((r, i) => {
+          const flag  = r.country_code === 'IN' ? '🇮🇳' : '🌍';
+          const color = TYPE_COLOR[r.place_type] || '#888';
+          const icon  = TYPE_ICON[r.place_type]  || '📍';
+          const sub   = r.district
+            ? `<div style="font-size:.56rem;color:#666;margin-top:1px;">${r.district}${r.state ? ', '+r.state : ''}</div>`
+            : (r.state ? `<div style="font-size:.56rem;color:#666;margin-top:1px;">${r.state}</div>` : '');
+          return `<div class="search-result-item" style="flex-direction:column;align-items:flex-start;gap:1px;" onclick="searchSelectCity(${i})">
+            <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+              <span style="font-weight:600;">${flag} ${r.name}</span>
+              <span style="color:${color};font-size:.56rem;font-weight:700;white-space:nowrap;flex-shrink:0;">${icon} ${r.place_type||'Place'}</span>
+            </div>
+            ${sub}
+          </div>`;
+        }).join('');
+        const sep = local.length && globalResults.length
+          ? `<div style="padding:3px 14px;font-family:monospace;font-size:.56rem;color:#444;background:rgba(255,255,255,.03);letter-spacing:1px;">── MORE RESULTS ──</div>`
           : '';
-        const globalHtml = _searchResults
-          .filter(r => !local.some(l => l.city.toLowerCase()===r.name.toLowerCase()))
-          .slice(0, 6)
-          .map((r,i)=>{
-            const typeColor = {'City':'#e8441a','Town':'#ff9800','Village':'#4caf50','Hamlet':'#66bb6a','Suburb':'#2196f3'}[r.place_type]||'#888';
-            return `<div class="search-result-item" onclick="searchSelectCity(${i})">
-              <span>🌍 ${r.display}</span>
-              <span style="color:${typeColor};font-size:.58rem;font-weight:700;white-space:nowrap;">${r.place_type||'Place'} · PREVIEW</span>
-            </div>`;
-          }).join('');
-        box.innerHTML = localHtml() + sep + (globalHtml || (!local.length ? '<div style="padding:10px 14px;font-family:monospace;font-size:.65rem;color:#666;">No results found.</div>' : ''));
-        box.style.display='block';
+        box.innerHTML = localHtml() + sep + (globalHtml || (!local.length ? `<div style="padding:10px 14px;font-family:monospace;font-size:.65rem;color:#666;">No results — try adding district or state name</div>` : ''));
+        box.style.display = 'block';
       })
-      .catch(()=>{
-        if (!local.length) box.innerHTML='<div style="padding:10px 14px;font-family:monospace;font-size:.65rem;color:#f44336;">Search unavailable — try clicking a city card.</div>';
+      .catch(() => {
+        if (!local.length) box.innerHTML = `<div style="padding:10px 14px;font-family:monospace;font-size:.65rem;color:#f44336;">Search unavailable.</div>`;
       });
-  }, 380);
+  }, 350);
 }
-
 // Called when user clicks a worldwide (non-list) search result
 function searchSelectCity(idx) {
   const r = _searchResults[idx]; if (!r) return;
@@ -2301,71 +2311,86 @@ def city_api(city_name):
 
 @app.route("/api/geocode")
 def geocode():
-    """Search any named place via OpenStreetMap Nominatim — cities, towns, villages, hamlets, rural areas."""
-    q = request.args.get("q","").strip()
+    """Search any named place via OpenStreetMap Nominatim — India-biased, with fallback worldwide."""
+    q = request.args.get("q", "").strip()
     if not q:
-        return jsonify({"error":"No query"}), 400
-    try:
-        r = requests.get(
+        return jsonify({"error": "No query"}), 400
+
+    def _fetch(params):
+        return requests.get(
             "https://nominatim.openstreetmap.org/search",
-            params={
-                "q": q,
-                "format": "json",
-                "limit": 8,
-                "addressdetails": 1,
-                "extratags": 1,       # population, place type etc.
-                "namedetails": 1,     # local language names
-            },
-            headers={"User-Agent": "WeatherDrift/2.0 (weather app)"},
+            params=params,
+            headers={"User-Agent": "AHOY WeatherDrift/2.0 (weather app)"},
             timeout=10
-        )
-        results = r.json()
+        ).json()
+
+    def _parse(results, boost_india=False):
         suggestions = []
-        seen = set()  # deduplicate by (lat,lon) rounded to 2 dp
+        seen = set()
+
+        # Place-type priority — more specific = better
+        TYPE_RANK = {
+            "hamlet": 1, "isolated_dwelling": 2, "locality": 3,
+            "neighbourhood": 4, "suburb": 5, "village": 6,
+            "town": 7, "city_district": 8, "city": 9,
+            "municipality": 10, "county": 11, "region": 12,
+            "state": 13, "country": 14,
+        }
 
         for item in results:
             addr = item.get("address", {})
 
-            # ── Resolve the best place name (most specific → least specific) ──
+            # Best place name — most specific first
             place_name = (
-                addr.get("hamlet")       or   # tiny settlement
+                addr.get("hamlet") or
                 addr.get("isolated_dwelling") or
-                addr.get("locality")     or
-                addr.get("neighbourhood")or
-                addr.get("suburb")       or
-                addr.get("village")      or
-                addr.get("town")         or
-                addr.get("city_district")or
-                addr.get("city")         or
+                addr.get("locality") or
+                addr.get("neighbourhood") or
+                addr.get("suburb") or
+                addr.get("village") or
+                addr.get("town") or
+                addr.get("city_district") or
+                addr.get("city") or
                 addr.get("municipality") or
-                addr.get("county")       or
-                addr.get("region")       or
+                addr.get("county") or
+                addr.get("region") or
                 item.get("name", "")
             )
+            if not place_name:
+                continue
 
-            # ── Build context string (state/district for disambiguation) ──
-            state    = addr.get("state") or addr.get("province") or addr.get("region") or ""
-            district = addr.get("county") or addr.get("state_district") or ""
-            country_name = addr.get("country", "")
             country_code = addr.get("country_code", "").upper()
+            country_name = addr.get("country", "")
+            state        = addr.get("state") or addr.get("province") or addr.get("region") or ""
+            district     = addr.get("state_district") or addr.get("county") or ""
+            postcode     = addr.get("postcode", "")
 
-            # Smart display: Village, District, State, Country
-            context_parts = []
+            # Build display string: Place, District, State, Country
+            ctx = []
             if district and district.lower() != place_name.lower():
-                context_parts.append(district)
+                ctx.append(district)
             if state and state.lower() != place_name.lower() and state != district:
-                context_parts.append(state)
-            if country_name:
-                context_parts.append(country_name)
-            context = ", ".join(context_parts)
-            display = f"{place_name}, {context}" if context else place_name
+                ctx.append(state)
+            if country_name and country_code != "IN":  # skip "India" for Indian results — already obvious
+                ctx.append(country_name)
+            display = f"{place_name}, {', '.join(ctx)}" if ctx else place_name
 
-            # Place type label (City / Town / Village / Hamlet / etc.)
-            osm_type  = item.get("type", "")
-            place_type = item.get("addresstype", osm_type).replace("_"," ").title()
+            # Append postcode for Indian results if available (helps distinguish same-name villages)
+            if country_code == "IN" and postcode:
+                display += f" ({postcode})"
 
-            # Deduplicate
-            key = (round(float(item["lat"]),2), round(float(item["lon"]),2))
+            osm_type   = item.get("type", "")
+            place_type = item.get("addresstype", osm_type).replace("_", " ").title()
+
+            # Importance score: Nominatim importance + India boost + type rank bonus
+            importance = float(item.get("importance", 0.5))
+            if country_code == "IN":
+                importance += 0.4   # strongly prefer Indian results
+            type_bonus = 1.0 / (TYPE_RANK.get(osm_type, 15) + 1)
+            score = importance + type_bonus
+
+            # Deduplicate by rounded lat/lon
+            key = (round(float(item["lat"]), 2), round(float(item["lon"]), 2))
             if key in seen:
                 continue
             seen.add(key)
@@ -2373,15 +2398,68 @@ def geocode():
             suggestions.append({
                 "display":      display,
                 "name":         place_name,
-                "place_type":   place_type,   # "Village", "Hamlet", "City" etc.
+                "place_type":   place_type,
                 "lat":          float(item["lat"]),
                 "lon":          float(item["lon"]),
                 "country_code": country_code,
                 "country_name": country_name,
                 "state":        state,
+                "district":     district,
+                "score":        score,
             })
 
-        return jsonify({"results": suggestions})
+        # Sort by score descending
+        suggestions.sort(key=lambda x: x["score"], reverse=True)
+        return suggestions
+
+    try:
+        all_results = []
+
+        # Pass 1: India-biased search (countrycodes=in)
+        india_raw = _fetch({
+            "q": q,
+            "format": "json",
+            "limit": 10,
+            "addressdetails": 1,
+            "extratags": 1,
+            "namedetails": 1,
+            "countrycodes": "in",       # restrict to India first
+            "accept-language": "en",
+        })
+        india_suggestions = _parse(india_raw, boost_india=True)
+        all_results.extend(india_suggestions)
+
+        # Pass 2: Worldwide fallback (only if India gave < 3 results)
+        if len(india_suggestions) < 3:
+            world_raw = _fetch({
+                "q": q,
+                "format": "json",
+                "limit": 8,
+                "addressdetails": 1,
+                "extratags": 1,
+                "namedetails": 1,
+                "accept-language": "en",
+            })
+            world_suggestions = _parse(world_raw)
+            # Add worldwide results not already in India results
+            seen_names = {r["name"].lower() for r in all_results}
+            for r in world_suggestions:
+                if r["name"].lower() not in seen_names:
+                    all_results.append(r)
+
+        # Final dedup by (lat, lon) and cap at 8
+        final = []
+        seen_coords = set()
+        for r in all_results:
+            key = (round(r["lat"], 2), round(r["lon"], 2))
+            if key not in seen_coords:
+                seen_coords.add(key)
+                final.append(r)
+            if len(final) >= 8:
+                break
+
+        return jsonify({"results": final})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
