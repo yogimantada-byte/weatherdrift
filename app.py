@@ -287,8 +287,10 @@ HTML_TEMPLATE = """
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/twemoji.min.js" crossorigin="anonymous" defer></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
 <style>
 :root {
   --ink:#0a0a0f; --paper:#f2ede6; --accent:#e8441a;
@@ -489,10 +491,15 @@ body.dark .chart-outer{background:#1a1a24;}
 /* ── WORLD MAP ── */
 .map-section{margin-bottom:60px;}
 /* Leaflet customisation */
-.leaflet-weather-tooltip{background:#0d1a2a!important;border:1px solid #e8441a!important;color:#f2ede6!important;border-radius:4px!important;font-family:monospace!important;padding:8px 12px!important;box-shadow:0 4px 20px rgba(0,0,0,.6)!important;}
+.leaflet-weather-tooltip{background:#0d1a2a!important;border:1px solid #e8441a!important;color:#f2ede6!important;border-radius:6px!important;font-family:monospace!important;padding:10px 14px!important;box-shadow:0 6px 24px rgba(0,0,0,.7)!important;}
 .leaflet-weather-tooltip::before{border-top-color:#e8441a!important;}
 .leaflet-tooltip-top::before{border-top-color:#e8441a!important;}
+.leaflet-weather-popup .leaflet-popup-content-wrapper{background:#0d1a2a!important;border:1px solid #e8441a!important;color:#f2ede6!important;border-radius:8px!important;font-family:monospace!important;box-shadow:0 8px 32px rgba(0,0,0,.8)!important;padding:0!important;}
+.leaflet-weather-popup .leaflet-popup-content{margin:14px 16px!important;color:#f2ede6!important;}
+.leaflet-weather-popup .leaflet-popup-tip{background:#e8441a!important;}
+.leaflet-weather-popup .leaflet-popup-close-button{color:#e8441a!important;font-size:1rem!important;top:8px!important;right:10px!important;}
 .leaflet-container{font-family:monospace!important;background:#050d1a!important;}
+.leaflet-control-scale-line{background:rgba(5,13,26,.8)!important;border-color:#555!important;color:#888!important;font-family:monospace!important;font-size:.55rem!important;letter-spacing:.5px!important;}
 .leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane > svg,.leaflet-pane > canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute!important;}
 .leaflet-map-pane{z-index:auto!important;}
 .leaflet-tile-pane{z-index:200!important;}
@@ -797,11 +804,13 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div class="map-view-btns">
           <button class="map-view-btn active" onclick="setMapView('dark')"      id="mv-dark">🌑 Dark</button>
+          <button class="map-view-btn"        onclick="setMapView('night')"     id="mv-night">🌙 Night</button>
           <button class="map-view-btn"        onclick="setMapView('satellite')" id="mv-satellite">🛰️ Satellite</button>
           <button class="map-view-btn"        onclick="setMapView('street')"    id="mv-street">🗺️ Street</button>
           <button class="map-view-btn"        onclick="setMapView('topo')"      id="mv-topo">⛰️ Terrain</button>
+          <button class="map-view-btn"        onclick="setMapView('outdoor')"   id="mv-outdoor">🥾 Outdoors</button>
           <button class="map-view-btn"        onclick="setMapView('light')"     id="mv-light">☀️ Light</button>
-          <button class="map-view-btn"        onclick="setMapView('watercolor')" id="mv-watercolor">🎨 Watercolor</button>
+          <button class="map-view-btn"        onclick="setMapView('smooth')"    id="mv-smooth">🎨 Smooth</button>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
           <div style="position:relative;">
@@ -821,6 +830,8 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
             <button class="map-zoom-btn" onclick="_leafletMap && _leafletMap.zoomIn()" title="Zoom in">+</button>
             <button class="map-zoom-btn" onclick="_leafletMap && _leafletMap.zoomOut()" title="Zoom out">−</button>
             <button class="map-zoom-btn" onclick="mapReset()" title="Reset view">⌂</button>
+            <button class="map-zoom-btn" onclick="mapLocateMe()" title="My location">📍</button>
+            <button class="map-zoom-btn" onclick="mapFitAll()" title="Fit all cities">⊞</button>
           </div>
         </div>
       </div>
@@ -1434,28 +1445,44 @@ function tempColor(t) {
 // ── Map tile layer definitions (all free, no API key) ─────────────────────
 const MAP_VIEWS = {
   dark: {
+    // CartoDB Dark Matter — sleek dark base
     url:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    opts: { subdomains: 'abcd', maxZoom: 19 },
+    opts: { subdomains: 'abcd', maxZoom: 20, detectRetina: true },
   },
   satellite: {
+    // ESRI World Imagery — free high-res satellite
     url:  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     opts: { maxZoom: 19 },
   },
   street: {
-    url:  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    opts: { subdomains: 'abc', maxZoom: 19 },
+    // OpenStreetMap standard tiles (official CDN)
+    url:  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    opts: { maxZoom: 19 },
   },
   topo: {
+    // OpenTopoMap — elevation contours + terrain shading
     url:  'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     opts: { subdomains: 'abc', maxZoom: 17 },
   },
   light: {
+    // CartoDB Positron — minimal light theme
     url:  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    opts: { subdomains: 'abcd', maxZoom: 19 },
+    opts: { subdomains: 'abcd', maxZoom: 20, detectRetina: true },
   },
-  watercolor: {
-    url:  'https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg',
-    opts: { maxZoom: 16 },
+  smooth: {
+    // Stadia Alidade Smooth — soft muted palette, great contrast for markers
+    url:  'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
+    opts: { maxZoom: 20, detectRetina: true },
+  },
+  night: {
+    // CartoDB Dark Matter (no labels) — pure dark night sky
+    url:  'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+    opts: { subdomains: 'abcd', maxZoom: 20, detectRetina: true },
+  },
+  outdoor: {
+    // Stadia Outdoors — hiking trails, parks, nature features
+    url:  'https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png',
+    opts: { maxZoom: 20, detectRetina: true },
   },
 };
 
@@ -1469,17 +1496,24 @@ function initLeafletMap() {
     center: [20, 0],
     zoom: 2,
     minZoom: 2,
-    maxZoom: 19,
+    maxZoom: 20,
     zoomControl: false,
     attributionControl: false,
+    preferCanvas: false,
   });
 
-  // Load default dark tile layer
+  // Default dark tile layer
   const v = MAP_VIEWS['dark'];
   _currentTileLayer = L.tileLayer(v.url, v.opts).addTo(_leafletMap);
 
+  // Subtle scale bar bottom-left
+  L.control.scale({ imperial: false, maxWidth: 120 }).addTo(_leafletMap);
+
   // Click anywhere → fetch weather at that point
   _leafletMap.on('click', function(e) {
+    // Ignore if clicking a marker popup
+    if (e.originalEvent && e.originalEvent.target.closest &&
+        e.originalEvent.target.closest('.leaflet-popup')) return;
     const lat = e.latlng.lat.toFixed(5);
     const lon = e.latlng.lng.toFixed(5);
     mapClickWeather(lat, lon);
@@ -1517,47 +1551,151 @@ function renderMapDots(weatherList) {
   _leafletMarkers.forEach(m => m.remove());
   _leafletMarkers = [];
 
+  // Close any open popups
+  _leafletMap.closePopup();
+
+  const zoom = _leafletMap.getZoom();
+
   weatherList.forEach(w => {
     if (!w.lat || !w.lon) return;
-    const color = tempColor(w.temp);
-    const size  = 14;
+    const color  = tempColor(w.temp);
+    const temp   = w.temp !== undefined ? Math.round(w.temp) : '—';
+    // Scale dot size with zoom level — bigger when zoomed in
+    const base   = zoom >= 7 ? 40 : zoom >= 5 ? 32 : zoom >= 4 ? 26 : 20;
+    const border = 2;
 
-    // Custom pulsing circle marker
+    // Pulsing dot with temperature label inside
     const icon = L.divIcon({
       className: '',
       html: `<div style="
-        width:${size}px;height:${size}px;border-radius:50%;
-        background:${color};border:2px solid #fff;
-        box-shadow:0 0 0 0 ${color};
-        animation:mapPulse 2s infinite;position:relative;">
-        <div style="
-          position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-          width:${size+8}px;height:${size+8}px;border-radius:50%;
-          border:1.5px solid ${color};opacity:.4;
-          animation:mapRing 2s infinite;pointer-events:none;"></div>
-      </div>`,
-      iconSize: [size, size],
-      iconAnchor: [size/2, size/2],
+          width:${base}px;height:${base}px;border-radius:50%;
+          background:${color};border:${border}px solid rgba(255,255,255,.85);
+          box-shadow:0 2px 10px rgba(0,0,0,.45),0 0 0 0 ${color};
+          animation:mapPulse 3s ease-in-out infinite;
+          display:flex;align-items:center;justify-content:center;
+          position:relative;cursor:pointer;">
+          <span style="
+            font-family:monospace;font-weight:700;
+            font-size:${base>=32?'.65rem':'.52rem'};
+            color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);
+            line-height:1;letter-spacing:-.3px;pointer-events:none;">${temp}°</span>
+          <div style="
+            position:absolute;top:50%;left:50%;
+            transform:translate(-50%,-50%);
+            width:${base+10}px;height:${base+10}px;border-radius:50%;
+            border:1.5px solid ${color};opacity:.35;
+            animation:mapRing 3s ease-in-out infinite;
+            pointer-events:none;"></div>
+        </div>`,
+      iconSize:   [base, base],
+      iconAnchor: [base/2, base/2],
     });
 
-    const marker = L.marker([w.lat, w.lon], {icon})
+    // Rich tooltip on hover
+    const tooltipHtml = `
+      <div style="font-family:monospace;font-size:.68rem;line-height:1.75;min-width:170px;">
+        <div style="font-weight:700;font-size:.8rem;margin-bottom:5px;color:${color};">
+          ${w.icon||'🌡️'} ${w.city}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;">
+          <div>🌡 ${temp}°C</div><div>🤔 ${w.feels_like!==undefined?Math.round(w.feels_like)+'°C':'—'}</div>
+          <div>💧 ${w.humidity||'—'}%</div><div>💨 ${w.wind_speed||'—'} km/h</div>
+          <div>☀️ UV ${w.uv_index||'—'}</div><div>🌧 ${w.rain_prob||0}%</div>
+        </div>
+        <div style="margin-top:5px;padding-top:4px;border-top:1px solid rgba(255,255,255,.1);
+          color:${w.aqi_color||'#4caf50'};font-size:.6rem;">
+          AQI ${w.aqi||'—'} · ${w.aqi_label||'—'}
+        </div>
+        <div style="color:#555;font-size:.56rem;margin-top:3px;">Click for full details →</div>
+      </div>`;
+
+    // Popup on click — mini weather card
+    const popupHtml = `
+      <div style="font-family:monospace;font-size:.68rem;line-height:1.8;min-width:200px;padding:2px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:1.6rem;">${w.icon||'🌡️'}</span>
+          <div>
+            <div style="font-weight:700;font-size:.85rem;color:${color};">${w.city}</div>
+            <div style="color:#aaa;font-size:.6rem;">${w.condition||'—'}</div>
+          </div>
+        </div>
+        <div style="font-size:1.8rem;font-weight:700;color:${color};margin-bottom:6px;text-align:center;">
+          ${temp}°C
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;font-size:.62rem;color:#ccc;">
+          <div>💧 Humidity: ${w.humidity||'—'}%</div>
+          <div>💨 Wind: ${w.wind_speed||'—'} km/h</div>
+          <div>🌅 Sunrise: ${w.sunrise||'—'}</div>
+          <div>🌇 Sunset: ${w.sunset||'—'}</div>
+          <div>☀️ UV Index: ${w.uv_index||'—'}</div>
+          <div>🌧 Rain: ${w.rain_prob||0}%</div>
+        </div>
+        <div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,.1);
+          display:flex;align-items:center;justify-content:space-between;">
+          <span style="color:${w.aqi_color||'#4caf50'};font-size:.6rem;">AQI ${w.aqi||'—'} · ${w.aqi_label||'—'}</span>
+          <button onclick="selectCity('${w.city.replace(/'/g,"\\'")}');_leafletMap.closePopup();"
+            style="background:${color};border:none;color:#fff;padding:3px 10px;
+              font-family:monospace;font-size:.58rem;border-radius:3px;cursor:pointer;
+              letter-spacing:.5px;font-weight:700;">SELECT →</button>
+        </div>
+      </div>`;
+
+    const marker = L.marker([w.lat, w.lon], {icon, zIndexOffset: Math.round(w.temp||0)*10})
       .addTo(_leafletMap)
-      .bindTooltip(`
-        <div style="font-family:monospace;font-size:.7rem;line-height:1.7;min-width:150px;">
-          <div style="font-weight:700;font-size:.8rem;margin-bottom:4px;">${w.icon||'🌡️'} ${w.city}</div>
-          <div>🌡 ${w.temp}°C &nbsp; 💧${w.humidity||'—'}%</div>
-          <div>💨 ${w.wind_speed||'—'} km/h &nbsp; UV ${w.uv_index||'—'}</div>
-          <div style="color:${w.aqi_color||'#0c8'};margin-top:2px;">AQI ${w.aqi||'—'} · ${w.aqi_label||'—'}</div>
-          <div style="color:#888;font-size:.58rem;margin-top:3px;">Click to select</div>
-        </div>`, {
-          direction: 'top',
-          offset: [0, -8],
-          className: 'leaflet-weather-tooltip',
-        })
-      .on('click', () => selectCity(w.city));
+      .bindTooltip(tooltipHtml, {
+        direction: 'top',
+        offset:    [0, -(base/2+4)],
+        className: 'leaflet-weather-tooltip',
+        sticky:    false,
+      })
+      .bindPopup(popupHtml, {
+        className:   'leaflet-weather-popup',
+        maxWidth:    240,
+        offset:      [0, -(base/2)],
+        closeButton: true,
+      })
+      .on('click', function() {
+        this.openPopup();
+      });
 
     _leafletMarkers.push(marker);
   });
+
+  // Re-render on zoom so marker sizes update
+  _leafletMap.off('zoomend', _onMapZoom);
+  _leafletMap.on('zoomend',  _onMapZoom = function() {
+    if (_leafletMarkers.length) renderMapDots(
+      _leafletMarkers.map(m => m._weatherData).filter(Boolean)
+    );
+  });
+
+  // Attach weather data to each marker for zoom re-render
+  _leafletMarkers.forEach((m, i) => {
+    if (weatherList[i]) m._weatherData = weatherList[i];
+  });
+}
+
+// Zoom-end handler reference (so we can remove/re-add cleanly)
+let _onMapZoom = null;
+
+// Fit map to show all city markers
+function mapFitAll() {
+  if (!_leafletMap || !_leafletMarkers.length) return;
+  const group = L.featureGroup(_leafletMarkers);
+  _leafletMap.fitBounds(group.getBounds().pad(0.08), {maxZoom: 6});
+}
+
+// Fly to user's GPS location
+function mapLocateMe() {
+  if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const {latitude: lat, longitude: lon} = pos.coords;
+      if (_leafletMap) _leafletMap.flyTo([lat, lon], 11, {duration: 1.5});
+      mapClickWeather(lat.toFixed(5), lon.toFixed(5));
+    },
+    err => alert('Could not get your location: ' + err.message)
+  );
 }
 
 function mapReset() {
@@ -2459,7 +2597,11 @@ if (typeof twemoji!=='undefined') {
 // Initial map render — init Leaflet then plot dots
 setTimeout(()=>{
   initLeafletMap();
-  if (allCities.length) renderMapDots(allCities);
+  if (allCities.length) {
+    renderMapDots(allCities);
+    // Auto-fit to show all markers on first load (slight delay for tiles to load)
+    setTimeout(() => { if (_leafletMap && _leafletMarkers.length) mapFitAll(); }, 600);
+  }
 }, 600);
 
 // Initial bg
