@@ -528,7 +528,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 
 <!-- LOADER -->
 <div id="page-loader" style="position:fixed;inset:0;background:#0a0a0f;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .5s;">
-  <div style="font-family:'Bebas Neue',sans-serif;font-size:3rem;color:#f2ede6;letter-spacing:4px;">Weather<span style="color:#e8441a">Drift</span></div>
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:3rem;color:#f2ede6;letter-spacing:4px;">AHOY Weather<span style="color:#e8441a">Drift</span></div>
   <div style="font-family:monospace;font-size:.8rem;color:#8a8070;margin-top:16px;letter-spacing:2px;">LOADING GLOBAL WEATHER...</div>
   <div style="margin-top:24px;width:200px;height:3px;background:#1a1a1f;border-radius:2px;overflow:hidden;">
     <div style="height:100%;background:#e8441a;border-radius:2px;animation:load-bar 2s ease-in-out infinite;"></div>
