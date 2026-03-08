@@ -303,7 +303,7 @@ body.dark {
 body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;overflow-x:hidden;transition:background .3s,color .3s;}
 
 /* ── HEADER ── */
-header{background:#0a0a0f;color:#f2ede6;padding:0 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid var(--accent);position:sticky;top:0;z-index:100;}
+header{background:#0a0a0f;color:#f2ede6;padding:0 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid var(--accent);position:sticky;top:0;z-index:1000;}
 .logo-block{display:flex;align-items:baseline;gap:12px;padding:18px 0;}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:2.6rem;letter-spacing:3px;color:#f2ede6;}
 .logo span{color:var(--accent);}
@@ -320,7 +320,7 @@ header{background:#0a0a0f;color:#f2ede6;padding:0 40px;display:flex;align-items:
 .search-wrap input::placeholder{color:#666;}
 .search-wrap input:focus{border-color:var(--accent);}
 .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:.9rem;pointer-events:none;}
-#search-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#1a1a22;border:1px solid rgba(255,255,255,.1);border-radius:6px;z-index:200;max-height:260px;overflow-y:auto;display:none;}
+#search-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#1a1a22;border:1px solid rgba(255,255,255,.1);border-radius:6px;z-index:1100;max-height:260px;overflow-y:auto;display:none;}
 .search-result-item{padding:10px 14px;font-family:'Space Mono',monospace;font-size:.7rem;color:#ccc;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.05);}
 .search-result-item:hover{background:rgba(232,68,26,.15);color:white;}
 .toolbar-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:7px 14px;color:#ccc;font-family:'Space Mono',monospace;font-size:.68rem;letter-spacing:1px;cursor:pointer;transition:all .2s;white-space:nowrap;}
@@ -493,6 +493,14 @@ body.dark .chart-outer{background:#1a1a24;}
 .leaflet-weather-tooltip::before{border-top-color:#e8441a!important;}
 .leaflet-tooltip-top::before{border-top-color:#e8441a!important;}
 .leaflet-container{font-family:monospace!important;background:#050d1a!important;}
+.leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane > svg,.leaflet-pane > canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute!important;}
+.leaflet-map-pane{z-index:auto!important;}
+.leaflet-tile-pane{z-index:200!important;}
+.leaflet-overlay-pane{z-index:400!important;}
+.leaflet-shadow-pane{z-index:500!important;}
+.leaflet-marker-pane{z-index:600!important;}
+.leaflet-tooltip-pane{z-index:650!important;}
+.leaflet-popup-pane{z-index:700!important;}
 .leaflet-control-attribution{display:none!important;}
 @keyframes mapPulse{0%,100%{box-shadow:0 0 0 0 rgba(232,68,26,.6);}70%{box-shadow:0 0 0 8px rgba(232,68,26,0);}}
 @keyframes mapRing{0%{transform:translate(-50%,-50%) scale(1);opacity:.4;}100%{transform:translate(-50%,-50%) scale(2);opacity:0;}}
@@ -783,7 +791,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 <!-- WORLD MAP -->
 <section class="map-section">
   <div class="section-label">🗺️ World Weather Map</div>
-  <div class="map-outer">
+  <div class="map-outer" style="isolation:isolate;">
     <div class="map-toolbar" style="flex-direction:column;align-items:stretch;gap:10px;">
       <!-- Row 1: view toggles + search + zoom -->
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
