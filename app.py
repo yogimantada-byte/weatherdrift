@@ -34,7 +34,9 @@ def _save_data():
 _cache = {"weather": None, "timestamp": 0, "last_updated": "Never"}
 _custom_cities  = {}   # user-added cities (persisted to disk)
 _deleted_cities = set()  # built-in cities hidden by user (persisted to disk)
-REFRESH_INTERVAL = 60
+REFRESH_INTERVAL  = 900   # 15 min — open-meteo data updates every 15min anyway
+CACHE_STALE_SECS  = 840   # consider stale after 14 min
+STARTUP_FETCH_DELAY = 2   # seconds before first fetch after server start
 
 # Load persisted data on startup
 _load_data()
@@ -249,23 +251,43 @@ def get_weather_data():
     return [results[c] for c in all_c if c in results]
 
 def refresh_cache():
+    """Fetch fresh weather for all cities and update cache."""
     global _cache
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Refreshing cache...")
-    data = get_weather_data()
-    _cache["weather"] = data
-    _cache["timestamp"] = time.time()
-    _cache["last_updated"] = datetime.now().strftime("%H:%M:%S")
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Cache updated — {len(data)} cities")
+    t0 = time.time()
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching weather for all cities...")
+    try:
+        data = get_weather_data()
+        if data:                        # only update if we got real data
+            _cache["weather"]      = data
+            _cache["timestamp"]    = time.time()
+            _cache["last_updated"] = datetime.now().strftime("%H:%M IST")
+            elapsed = round(time.time() - t0, 1)
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Cache refreshed — {len(data)} cities in {elapsed}s")
+        else:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Refresh skipped — no data returned")
+    except Exception as e:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Refresh error: {e}")
+
+def is_cache_stale():
+    """True if cache is empty or older than CACHE_STALE_SECS."""
+    return (_cache["weather"] is None or
+            (time.time() - _cache["timestamp"]) > CACHE_STALE_SECS)
 
 def background_refresh():
+    """Background thread: wait briefly after startup, then refresh on schedule."""
+    time.sleep(STARTUP_FETCH_DELAY)   # let gunicorn fully start
     while True:
-        try: refresh_cache()
-        except Exception as e: print(f"BG error: {e}")
+        try:
+            refresh_cache()
+        except Exception as e:
+            print(f"BG refresh error: {e}")
         time.sleep(REFRESH_INTERVAL)
 
 def get_cached_weather():
-    if _cache["weather"] is None: refresh_cache()
-    return _cache["weather"]
+    """Return cached data. If stale/missing, trigger immediate refresh."""
+    if is_cache_stale():
+        refresh_cache()
+    return _cache["weather"] or []
 
 _bg = threading.Thread(target=background_refresh, daemon=True)
 _bg.start()
@@ -2565,12 +2587,26 @@ function downloadCard() {
 // ── Auto refresh ───────────────────────────────────────────────────────────
 function autoRefresh() {
   fetch('/api/weather').then(r=>r.json()).then(data=>{
+    if (!data.weather || !data.weather.length) return;
+
     updateAllCards(data.weather);
     updateTicker(data.weather);
-    const l=document.getElementById('last-updated-label');
-    if(l) l.textContent='Last updated: '+data.last_updated;
 
-    // Always record history for ALL cities so switching tabs shows real data
+    // Update last-updated label — show stale warning if data is old
+    const l = document.getElementById('last-updated-label');
+    if (l) {
+      const ageMin = Math.round((data.cache_age || 0) / 60);
+      if (data.is_stale) {
+        l.textContent = 'Updating weather data...';
+        l.style.color = '#ff9800';
+      } else {
+        l.textContent = 'Last updated: ' + data.last_updated +
+          (ageMin > 0 ? ' (' + ageMin + ' min ago)' : ' (just now)');
+        l.style.color = '#e8441a';
+      }
+    }
+
+    // Record history for all cities
     data.weather.forEach(w => {
       if (!histData[w.city]) histData[w.city] = [];
       histData[w.city].push({
@@ -2582,17 +2618,17 @@ function autoRefresh() {
       if (histData[w.city].length > 20) histData[w.city].shift();
     });
 
-    // Update featured panel + redraw chart for current city
+    // Update featured panel + chart for current city
     if (currentCity) {
-      const w = data.weather.find(x=>x.city===currentCity);
-      if (w) {
-        updateFeaturedPanel(w);
-        drawChart(histData[currentCity]);
-      }
+      const w = data.weather.find(x => x.city === currentCity);
+      if (w) { updateFeaturedPanel(w); drawChart(histData[currentCity]); }
     }
 
-    // Refresh map markers with latest temps/conditions
+    // Refresh map markers
     if (_leafletMap) renderMapDots(data.weather);
+
+    // If still stale, poll again in 15s to catch the in-progress refresh
+    if (data.is_stale) setTimeout(autoRefresh, 15000);
 
   }).catch(()=>{});
 }
@@ -2635,7 +2671,12 @@ if (_initCity && histData[_initCity]) {
   setTimeout(()=>drawChart(histData[_initCity]), 200);
 }
 
-setInterval(autoRefresh, 60000);
+// Run immediately after 3s (catches fresh data from server startup refresh)
+// then poll every 15 min (matches server REFRESH_INTERVAL)
+setTimeout(() => {
+  autoRefresh();
+  setInterval(autoRefresh, 900000);   // 15 min
+}, 3000);
 
 // Twemoji
 if (typeof twemoji!=='undefined') {
@@ -2664,6 +2705,10 @@ console.log('AHOY WeatherDrift v2.0 ready ✅');
 # ── Flask Routes ─────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
+    # If cache is stale, serve what we have and trigger background refresh
+    # so next request gets fresh data (avoids blocking the page load)
+    if is_cache_stale() and _cache["weather"] is not None:
+        threading.Thread(target=refresh_cache, daemon=True).start()
     weather = get_cached_weather()
 
     # Map country codes to names for consistent sorting
@@ -2729,8 +2774,17 @@ def index():
 
 @app.route("/api/weather")
 def api_weather():
+    # Trigger background refresh if stale (non-blocking)
+    if is_cache_stale() and _cache["weather"] is not None:
+        threading.Thread(target=refresh_cache, daemon=True).start()
     weather = get_cached_weather()
-    return jsonify({"weather": weather, "last_updated": _cache["last_updated"]})
+    cache_age = round(time.time() - _cache["timestamp"])
+    return jsonify({
+        "weather":      weather,
+        "last_updated": _cache["last_updated"],
+        "cache_age":    cache_age,           # seconds since last refresh
+        "is_stale":     is_cache_stale(),    # JS can show warning if True
+    })
 
 @app.route("/api/city/<path:city_name>")
 def city_api(city_name):
