@@ -313,27 +313,45 @@ HTML_TEMPLATE = """
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0a0a0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WeatherDrift">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230a0a0f'/><text y='.9em' font-size='80'>🌤️</text></svg>">
 <style>
 :root {
-  --ink:#0a0a0f; --paper:#f2ede6; --accent:#e8441a;
-  --muted:#8a8070; --card-bg:#ffffff; --border:#d4cec5;
-  --toolbar-bg:#1a1a22; --success:#00c853; --warn:#ffd600;
+  --ink:#0d0d12; --paper:#f5f0eb; --accent:#e8441a; --accent2:#ff6b35;
+  --muted:#8a8070; --card-bg:#ffffff; --border:#ddd8d0;
+  --toolbar-bg:#13131a; --success:#00e676; --warn:#ffab00;
+  --glass:rgba(255,255,255,.06); --glass-border:rgba(255,255,255,.1);
+  --shadow:0 8px 32px rgba(0,0,0,.18);
+  --radius:12px; --radius-sm:8px;
 }
 body.dark {
-  --ink:#f2ede6; --paper:#0f0f14; --muted:#8a8a9a;
-  --card-bg:#1e1e2a; --border:#2a2a35; --toolbar-bg:#0a0a0f;
+  --ink:#eeeae4; --paper:#0d0d12; --muted:#7a7a8a;
+  --card-bg:#16161e; --border:#222230; --toolbar-bg:#0a0a0f;
+  --glass:rgba(255,255,255,.04); --glass-border:rgba(255,255,255,.08);
 }
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;overflow-x:hidden;transition:background .3s,color .3s;}
+body.dark{background:var(--paper);}
+body.dark::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% -20%,rgba(232,68,26,.08) 0%,transparent 60%);pointer-events:none;z-index:0;}
+body>*{position:relative;z-index:1;}
+::selection{background:var(--accent);color:#fff;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--accent);border-radius:3px;}
 
 /* ── HEADER ── */
-header{background:#0a0a0f;color:#f2ede6;padding:0 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid var(--accent);position:sticky;top:0;z-index:1000;}
-.logo-block{display:flex;align-items:baseline;gap:12px;padding:18px 0;}
-.logo{font-family:'Bebas Neue',sans-serif;font-size:2.6rem;letter-spacing:3px;color:#f2ede6;}
-.logo span{color:var(--accent);}
-.tagline{font-family:'Space Mono',monospace;font-size:.65rem;color:#8a8070;letter-spacing:2px;text-transform:uppercase;}
-.header-meta{font-family:'Space Mono',monospace;font-size:.7rem;color:#8a8070;text-align:right;line-height:1.8;}
-.live-badge{display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:white;padding:3px 10px;font-size:.65rem;letter-spacing:2px;font-weight:700;margin-bottom:4px;}
+header{background:rgba(10,10,15,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:#f2ede6;padding:0 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(232,68,26,.3);position:sticky;top:0;z-index:1000;box-shadow:0 4px 30px rgba(0,0,0,.3);}
+.logo-block{display:flex;align-items:baseline;gap:12px;padding:16px 0;}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:2.4rem;letter-spacing:4px;color:#f2ede6;background:linear-gradient(135deg,#f2ede6 0%,#e8441a 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.logo span{-webkit-text-fill-color:var(--accent);}
+.tagline{font-family:'Space Mono',monospace;font-size:.6rem;color:#666;letter-spacing:3px;text-transform:uppercase;}
+.header-meta{font-family:'Space Mono',monospace;font-size:.68rem;color:#777;text-align:right;line-height:1.9;}
+.live-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;padding:3px 12px;font-size:.6rem;letter-spacing:2px;font-weight:700;margin-bottom:4px;border-radius:20px;box-shadow:0 2px 12px rgba(232,68,26,.4);}
 .live-dot{width:6px;height:6px;background:white;border-radius:50%;animation:pulse 1.5s infinite;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
@@ -443,53 +461,45 @@ body.dark .compare-panel{background:#1a1a22;}
 .alert-bar.show{display:flex;}
 
 /* ── CITY GRID ── */
-.city-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:2px;margin-bottom:60px;background:var(--border);border:2px solid var(--border);}
-.city-card{background:#ffffff;padding:28px;cursor:pointer;transition:transform .2s,background .2s;animation:fadeUp .5s ease both;position:relative;overflow:hidden;}
-body.dark .city-card{background:#1e1e2a;}
-.city-card.selected{background:var(--accent)!important;transform:scale(1.02);z-index:10;}
-.city-card.selected .city-name{color:#fff!important;}
-.city-card.selected .city-country,.city-card.selected .city-condition,.city-card.selected .card-stat-label{color:rgba(255,255,255,.85)!important;}
-.city-card.selected .card-stat-value,.city-card.selected .city-temp{color:#fff!important;}
-.city-card.selected .card-stats{border-color:rgba(255,255,255,.25)!important;}
-.city-card:hover{background:#111118;transform:scale(1.02);z-index:10;}
-.city-card:hover .city-name{color:#fff!important;}
-.city-card:hover .city-country,.city-card:hover .city-condition,.city-card:hover .card-stat-label{color:#ccc!important;}
-.city-card:hover .card-stat-value{color:#fff!important;}
-.city-card:hover .card-stats{border-color:rgba(255,255,255,.12)!important;}
-.city-delete-btn{position:absolute;top:8px;right:8px;background:rgba(244,67,54,.15);border:1px solid rgba(244,67,54,.4);color:#f44336;width:24px;height:24px;border-radius:50%;font-size:.7rem;cursor:pointer;display:none;align-items:center;justify-content:center;z-index:20;transition:all .2s;line-height:1;}
+.city-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;margin-bottom:60px;}
+.city-card{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:24px;cursor:pointer;transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s,border-color .25s;animation:fadeUp .5s ease both;position:relative;overflow:hidden;}
+.city-card::after{content:'';position:absolute;inset:0;border-radius:var(--radius);background:linear-gradient(135deg,rgba(232,68,26,.06) 0%,transparent 60%);opacity:0;transition:opacity .25s;}
+body.dark .city-card{background:#13131c;border-color:#1e1e2e;}
+.city-card.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent),var(--shadow);transform:translateY(-3px);}
+.city-card.selected::after{opacity:1;}
+.city-card.selected .city-name,.city-card.selected .city-temp,.city-card.selected .card-stat-value{color:var(--accent)!important;}
+.city-card:hover{border-color:rgba(232,68,26,.5);box-shadow:var(--shadow);transform:translateY(-4px);}
+.city-card:hover::after{opacity:1;}
+body.dark .city-card:hover{background:#1a1a26;}
+.city-delete-btn{position:absolute;top:10px;right:10px;background:rgba(244,67,54,.1);border:1px solid rgba(244,67,54,.3);color:#f44336;width:26px;height:26px;border-radius:50%;font-size:.7rem;cursor:pointer;display:none;align-items:center;justify-content:center;z-index:20;transition:all .2s;line-height:1;}
 .city-card:hover .city-delete-btn{display:flex;}
-.city-delete-btn:hover{background:rgba(244,67,54,.85);color:#fff;border-color:#f44336;transform:scale(1.15);}
-.city-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;}
-.city-name{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:2px;color:#0a0a0f;transition:color .2s;}
-body.dark .city-name{color:#f0ede8;}
-.city-country{font-family:'Space Mono',monospace;font-size:.62rem;letter-spacing:1.5px;color:#333;text-transform:uppercase;margin-top:3px;font-weight:700;}
-body.dark .city-country{color:#b8b8cc;}
-.city-icon{font-size:2.2rem;font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;}
-.city-temp{font-family:'Bebas Neue',sans-serif;font-size:3.5rem;color:var(--accent);line-height:1;margin-bottom:6px;}
-.city-condition{font-size:.85rem;color:#444;font-weight:500;margin-bottom:12px;}
-body.dark .city-condition{color:#a8a8bc;}
-/* Mini badges */
-.city-badges{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
-.badge{font-family:'Space Mono',monospace;font-size:.55rem;padding:2px 7px;border-radius:20px;font-weight:700;letter-spacing:.5px;}
-.badge-aqi{background:rgba(0,200,83,.15);color:#00c853;}
-.badge-rain{background:rgba(79,195,247,.15);color:#4fc3f7;}
-.card-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding-top:16px;border-top:1px solid #ddd;}
-body.dark .card-stats{border-color:#2e2e3e;}
-.card-stat-label{font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:1.5px;color:#666;text-transform:uppercase;font-weight:600;}
-body.dark .card-stat-label{color:#8888a0;}
-.card-stat-value{font-size:.9rem;font-weight:600;color:#111;}
-body.dark .card-stat-value{color:#e0ddd8;}
+.city-delete-btn:hover{background:#f44336;color:#fff;transform:scale(1.1);}
+.city-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;}
+.city-name{font-family:'Bebas Neue',sans-serif;font-size:1.7rem;letter-spacing:2px;color:var(--ink);transition:color .2s;line-height:1;}
+.city-country{font-family:'Space Mono',monospace;font-size:.58rem;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-top:4px;}
+.city-icon{font-size:2rem;font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;filter:drop-shadow(0 2px 6px rgba(0,0,0,.2));}
+.city-temp{font-family:'Bebas Neue',sans-serif;font-size:3.2rem;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;margin-bottom:4px;}
+.city-condition{font-size:.8rem;color:var(--muted);font-weight:500;margin-bottom:10px;}
+.city-badges{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap;}
+.badge{font-family:'Space Mono',monospace;font-size:.52rem;padding:2px 8px;border-radius:20px;font-weight:700;letter-spacing:.5px;}
+.badge-aqi{background:rgba(0,230,118,.12);color:#00e676;border:1px solid rgba(0,230,118,.2);}
+.badge-rain{background:rgba(79,195,247,.12);color:#4fc3f7;border:1px solid rgba(79,195,247,.2);}
+.card-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-top:14px;border-top:1px solid var(--border);}
+.card-stat-label{font-family:'Space Mono',monospace;font-size:.52rem;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;}
+.card-stat-value{font-size:.88rem;font-weight:600;color:var(--ink);margin-top:2px;}
 
 /* ── FORECAST ── */
 .forecast-section{margin-bottom:60px;}
-.forecast-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:var(--border);border:2px solid var(--border);}
-.forecast-day{background:var(--card-bg);padding:20px 16px;text-align:center;animation:fadeUp .5s ease both;}
-.forecast-label{font-family:'Space Mono',monospace;font-size:.65rem;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;}
-.forecast-icon{font-size:1.8rem;margin-bottom:8px;font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;}
-.forecast-hi{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--accent);}
-.forecast-lo{font-family:'Space Mono',monospace;font-size:.65rem;color:var(--muted);margin-top:2px;}
-.forecast-rain-bar{height:3px;background:rgba(79,195,247,.3);border-radius:2px;margin-top:6px;overflow:hidden;}
-.forecast-rain-fill{height:100%;background:#4fc3f7;border-radius:2px;}
+.forecast-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:60px;}
+.forecast-day{background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:18px 12px;text-align:center;animation:fadeUp .5s ease both;transition:transform .2s,box-shadow .2s,border-color .2s;cursor:default;}
+body.dark .forecast-day{background:#13131c;border-color:#1e1e2e;}
+.forecast-day:hover{transform:translateY(-3px);box-shadow:var(--shadow);border-color:rgba(232,68,26,.4);}
+.forecast-label{font-family:'Space Mono',monospace;font-size:.58rem;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px;}
+.forecast-icon{font-size:1.8rem;margin-bottom:8px;font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;filter:drop-shadow(0 2px 4px rgba(0,0,0,.2));}
+.forecast-hi{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.forecast-lo{font-family:'Space Mono',monospace;font-size:.6rem;color:var(--muted);margin-top:2px;}
+.forecast-rain-bar{height:4px;background:rgba(79,195,247,.15);border-radius:2px;margin-top:8px;overflow:hidden;}
+.forecast-rain-fill{height:100%;background:linear-gradient(90deg,#4fc3f7,#0288d1);border-radius:2px;transition:width .5s ease;}
 
 /* ── HISTORY CHART ── */
 .history-section{margin-bottom:60px;}
@@ -566,10 +576,36 @@ body.dark .chart-outer{background:#1a1a24;}
 .add-msg{font-family:'Space Mono',monospace;font-size:.7rem;color:var(--accent);margin-top:8px;}
 
 /* ── FOOTER ── */
-footer{background:#0a0a0f;color:#f2ede6;padding:40px;display:flex;justify-content:space-between;align-items:center;border-top:3px solid var(--accent);}
-.footer-logo{font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:3px;}
-.footer-logo span{color:var(--accent);}
-.footer-info{font-family:'Space Mono',monospace;font-size:.65rem;color:#666;text-align:right;line-height:2;}
+footer{background:rgba(10,10,15,.98);backdrop-filter:blur(10px);color:#f2ede6;padding:40px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(232,68,26,.25);}
+.footer-logo{font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:3px;background:linear-gradient(135deg,#f2ede6,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.footer-logo span{-webkit-text-fill-color:var(--accent);}
+.footer-info{font-family:'Space Mono',monospace;font-size:.65rem;color:#555;text-align:right;line-height:2;}
+
+/* ── LANGUAGE TRANSLATIONS ── */
+[data-lang="te"] .lang-en{display:none!important;}
+[data-lang="hi"] .lang-en{display:none!important;}
+[data-lang="en"] .lang-te{display:none!important;}
+[data-lang="en"] .lang-hi{display:none!important;}
+[data-lang="te"] .lang-hi{display:none!important;}
+[data-lang="hi"] .lang-te{display:none!important;}
+
+/* ── PWA INSTALL BANNER ── */
+.pwa-banner{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#13131c;border:1px solid var(--accent);border-radius:var(--radius);padding:14px 24px;display:flex;align-items:center;gap:14px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.5);font-family:'Space Mono',monospace;font-size:.7rem;color:#f2ede6;animation:fadeUp .4s ease;display:none;}
+.pwa-banner.show{display:flex;}
+.pwa-banner button{background:var(--accent);border:none;color:#fff;padding:7px 16px;border-radius:var(--radius-sm);cursor:pointer;font-family:'Space Mono',monospace;font-size:.68rem;font-weight:700;}
+
+/* ── WEATHER ALERTS PANEL ── */
+.alerts-panel{display:none;background:#13131c;border:1px solid rgba(232,68,26,.3);border-radius:var(--radius);padding:20px 24px;margin-bottom:30px;animation:fadeUp .3s ease;}
+.alerts-panel.show{display:block;}
+.alert-item{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.06);}
+.alert-item:last-child{border-bottom:none;}
+.alert-icon{font-size:1.4rem;flex-shrink:0;}
+.alert-body{flex:1;}
+.alert-title{font-family:'Space Mono',monospace;font-size:.7rem;font-weight:700;color:#f2ede6;margin-bottom:3px;}
+.alert-desc{font-family:'Space Mono',monospace;font-size:.6rem;color:#888;}
+.alert-severity-high{border-left:3px solid #f44336;padding-left:12px;}
+.alert-severity-med{border-left:3px solid #ff9800;padding-left:12px;}
+.alert-severity-low{border-left:3px solid #4caf50;padding-left:12px;}
 
 /* ── ANIMATIONS ── */
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
@@ -629,6 +665,22 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
   <button onclick="document.getElementById('alert-bar').classList.remove('show')" style="margin-left:auto;background:none;border:none;color:white;cursor:pointer;font-size:1rem;">✕</button>
 </div>
 
+<!-- PWA INSTALL BANNER -->
+<div class="pwa-banner" id="pwa-banner">
+  <span>📲</span>
+  <span>
+    <span class="lang-en">Install WeatherDrift as an app</span>
+    <span class="lang-te">WeatherDrift app గా install చేయండి</span>
+    <span class="lang-hi">WeatherDrift को app की तरह install करें</span>
+  </span>
+  <button onclick="installPWA()">
+    <span class="lang-en">Install</span>
+    <span class="lang-te">Install</span>
+    <span class="lang-hi">Install</span>
+  </button>
+  <button onclick="document.getElementById('pwa-banner').classList.remove('show')" style="background:none;color:#888;padding:4px 8px;">✕</button>
+</div>
+
 <header>
   <div class="logo-block">
     <div>
@@ -655,6 +707,8 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
   <button class="toolbar-btn" id="dark-btn" onclick="toggleDark()">🌙 Dark</button>
   <button class="toolbar-btn" id="compare-btn" onclick="toggleCompare()">⚖️ Compare</button>
   <button class="toolbar-btn" onclick="toggleNotifications()">🔔 Alerts</button>
+  <button class="toolbar-btn" id="lang-btn" onclick="toggleLang()" title="Language / భాష">🌐 EN</button>
+  <button class="toolbar-btn" id="install-btn" onclick="installPWA()" style="display:none;" title="Install App">📲 Install</button>
 </div>
 
 <!-- CLOCKS -->
@@ -695,6 +749,22 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
         {% for w in weather_data %}<option value="{{ w.city }}" {% if loop.index == 2 %}selected{% endif %}>{{ w.city }}</option>{% endfor %}
       </select>
       <div id="compare-b-data"></div>
+    </div>
+  </div>
+</div>
+
+<!-- WEATHER ALERTS PANEL -->
+<div class="alerts-panel" id="alerts-panel">
+  <div class="section-label" style="margin-bottom:16px;">
+    ⚡ <span class="lang-en">Active Weather Alerts</span>
+    <span class="lang-te">వాతావరణ హెచ్చరికలు</span>
+    <span class="lang-hi">मौसम चेतावनियां</span>
+  </div>
+  <div id="alerts-list">
+    <div style="font-family:monospace;font-size:.7rem;color:#666;">
+      <span class="lang-en">No active alerts. All clear ✅</span>
+      <span class="lang-te">హెచ్చరికలు లేవు ✅</span>
+      <span class="lang-hi">कोई चेतावनी नहीं ✅</span>
     </div>
   </div>
 </div>
@@ -2627,6 +2697,9 @@ function autoRefresh() {
     // Refresh map markers
     if (_leafletMap) renderMapDots(data.weather);
 
+    // Update alerts panel with fresh data
+    updateAlertsPanel(data.weather);
+
     // If still stale, poll again in 15s to catch the in-progress refresh
     if (data.is_stale) setTimeout(autoRefresh, 15000);
 
@@ -2696,7 +2769,122 @@ setTimeout(()=>{
 // Initial bg
 setWeatherBg('{{ featured.condition }}');
 
-console.log('AHOY WeatherDrift v2.0 ready ✅');
+console.log('AHOY WeatherDrift v3.0 ready ✅');
+
+// ── LANGUAGE SWITCHER ──────────────────────────────────────────────────────
+const LANGS = ['en', 'te', 'hi'];
+const LANG_LABELS = { en: '🌐 EN', te: '🌐 తె', hi: '🌐 हि' };
+let _currentLang = localStorage.getItem('wd-lang') || 'en';
+
+function applyLang(lang) {
+  _currentLang = lang;
+  localStorage.setItem('wd-lang', lang);
+  document.documentElement.setAttribute('data-lang', lang);
+  const btn = document.getElementById('lang-btn');
+  if (btn) btn.textContent = LANG_LABELS[lang] || '🌐 EN';
+}
+
+function toggleLang() {
+  const idx  = LANGS.indexOf(_currentLang);
+  const next = LANGS[(idx + 1) % LANGS.length];
+  applyLang(next);
+}
+
+// Apply saved language on load
+applyLang(_currentLang);
+
+// ── PWA INSTALL ────────────────────────────────────────────────────────────
+let _pwaPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _pwaPrompt = e;
+  // Show install button in toolbar
+  const btn = document.getElementById('install-btn');
+  if (btn) btn.style.display = 'inline-flex';
+  // Show banner after 5 seconds
+  setTimeout(() => {
+    const banner = document.getElementById('pwa-banner');
+    if (banner && !localStorage.getItem('wd-pwa-dismissed')) {
+      banner.classList.add('show');
+    }
+  }, 5000);
+});
+
+async function installPWA() {
+  if (!_pwaPrompt) return;
+  _pwaPrompt.prompt();
+  const { outcome } = await _pwaPrompt.userChoice;
+  if (outcome === 'accepted') {
+    localStorage.setItem('wd-pwa-dismissed', '1');
+    const banner = document.getElementById('pwa-banner');
+    if (banner) banner.classList.remove('show');
+    const btn = document.getElementById('install-btn');
+    if (btn) btn.style.display = 'none';
+  }
+  _pwaPrompt = null;
+}
+
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// ── SMART WEATHER ALERTS ──────────────────────────────────────────────────
+function updateAlertsPanel(weatherList) {
+  const panel = document.getElementById('alerts-panel');
+  const list  = document.getElementById('alerts-list');
+  if (!panel || !list || !weatherList) return;
+
+  const alerts = [];
+  weatherList.forEach(w => {
+    if (!w || !w.city) return;
+    if (w.temp >= 42)
+      alerts.push({ sev:'high', icon:'🌡️', city:w.city, en:`Extreme heat: ${w.temp}°C`, te:`అత్యధిక వేడి: ${w.temp}°C`, hi:`अत्यधिक गर्मी: ${w.temp}°C` });
+    else if (w.temp >= 38)
+      alerts.push({ sev:'med', icon:'☀️', city:w.city, en:`High heat: ${w.temp}°C`, te:`అధిక వేడి: ${w.temp}°C`, hi:`अधिक गर्मी: ${w.temp}°C` });
+    if (w.temp <= 0)
+      alerts.push({ sev:'high', icon:'🥶', city:w.city, en:`Freezing: ${w.temp}°C`, te:`మంచు చలి: ${w.temp}°C`, hi:`हिमशीत: ${w.temp}°C` });
+    if (w.rain_prob >= 85)
+      alerts.push({ sev:'high', icon:'🌧️', city:w.city, en:`Heavy rain likely: ${w.rain_prob}%`, te:`భారీ వర్షం: ${w.rain_prob}%`, hi:`भारी बारिश: ${w.rain_prob}%` });
+    else if (w.rain_prob >= 65)
+      alerts.push({ sev:'med', icon:'🌦️', city:w.city, en:`Rain possible: ${w.rain_prob}%`, te:`వర్షం సాధ్యమే: ${w.rain_prob}%`, hi:`बारिश संभव: ${w.rain_prob}%` });
+    if (w.wind_speed >= 70)
+      alerts.push({ sev:'high', icon:'💨', city:w.city, en:`Strong winds: ${w.wind_speed} km/h`, te:`బలమైన గాలులు: ${w.wind_speed} km/h`, hi:`तेज़ हवाएं: ${w.wind_speed} km/h` });
+    if (w.aqi >= 200)
+      alerts.push({ sev:'high', icon:'😷', city:w.city, en:`Hazardous air quality: AQI ${w.aqi}`, te:`ప్రమాదకర గాలి: AQI ${w.aqi}`, hi:`खतरनाक वायु: AQI ${w.aqi}` });
+    else if (w.aqi >= 150)
+      alerts.push({ sev:'med', icon:'😮', city:w.city, en:`Poor air quality: AQI ${w.aqi}`, te:`వాయు నాణ్యత తక్కువ: AQI ${w.aqi}`, hi:`खराब वायु: AQI ${w.aqi}` });
+  });
+
+  if (!alerts.length) {
+    panel.classList.remove('show');
+    return;
+  }
+
+  panel.classList.add('show');
+  list.innerHTML = alerts.slice(0, 8).map(a => `
+    <div class="alert-item alert-severity-${a.sev}">
+      <span class="alert-icon">${a.icon}</span>
+      <div class="alert-body">
+        <div class="alert-title">${a.city}</div>
+        <div class="alert-desc">
+          <span class="lang-en">${a.en}</span>
+          <span class="lang-te">${a.te}</span>
+          <span class="lang-hi">${a.hi}</span>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+// ── NOTIFICATIONS TOGGLE ──────────────────────────────────────────────────
+function toggleNotifications() {
+  const panel = document.getElementById('alerts-panel');
+  if (panel) panel.classList.toggle('show');
+}
+
+// Run alerts on initial data
+if (allCities && allCities.length) updateAlertsPanel(allCities);
 </script>
 </body>
 </html>
@@ -3234,6 +3422,80 @@ def api_test():
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "cities": len(get_all_cities()), "cached": len(_cache["weather"] or [])})
+
+
+@app.route("/manifest.json")
+def pwa_manifest():
+    """PWA Web App Manifest — enables Add to Home Screen / Install."""
+    manifest = {
+        "name": "AHOY WeatherDrift",
+        "short_name": "WeatherDrift",
+        "description": "Global Weather Intelligence — Live weather for 60+ cities",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0a0a0f",
+        "theme_color": "#e8441a",
+        "orientation": "any",
+        "icons": [
+            {"src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0a0f'/><text y='.9em' font-size='80'>🌤️</text></svg>",
+             "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable"},
+            {"src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0a0f'/><text y='.9em' font-size='80'>🌤️</text></svg>",
+             "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable"},
+        ],
+        "categories": ["weather", "utilities"],
+        "lang": "en",
+    }
+    from flask import Response
+    import json as _json
+    return Response(_json.dumps(manifest), mimetype="application/manifest+json")
+
+
+@app.route("/sw.js")
+def service_worker():
+    """Minimal service worker for PWA — cache-first for static, network-first for API."""
+    sw_code = """
+const CACHE = 'weatherdrift-v3';
+const STATIC = ['/'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+  ));
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+  // Network-first for API calls
+  if (url.pathname.startsWith('/api/')) {
+    e.respondWith(
+      fetch(e.request).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+  // Cache-first for everything else
+  e.respondWith(
+    caches.match(e.request).then(cached => {
+      if (cached) return cached;
+      return fetch(e.request).then(resp => {
+        if (resp && resp.status === 200) {
+          const clone = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return resp;
+      });
+    })
+  );
+});
+"""
+    from flask import Response
+    return Response(sw_code, mimetype="application/javascript",
+                    headers={"Service-Worker-Allowed": "/"})
 
 
 if __name__ == "__main__":
