@@ -362,7 +362,7 @@ header{background:rgba(10,10,15,.96);backdrop-filter:blur(20px);-webkit-backdrop
 .search-wrap input::placeholder{color:#666;}
 .search-wrap input:focus{border-color:var(--accent);}
 .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:.9rem;pointer-events:none;}
-#search-results{position:fixed;background:#1a1a22;border:1px solid rgba(255,255,255,.15);border-radius:8px;z-index:9999;max-height:340px;overflow-y:auto;display:none;box-shadow:0 12px 40px rgba(0,0,0,.85);min-width:300px;pointer-events:auto;}
+/* #search-results styled via JS for guaranteed z-index above all stacking contexts */
 .search-result-item{padding:10px 14px;font-family:'Space Mono',monospace;font-size:.7rem;color:#ccc;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.05);}
 .search-result-item:hover{background:rgba(232,68,26,.15);color:white;}
 .toolbar-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:7px 14px;color:#ccc;font-family:'Space Mono',monospace;font-size:.68rem;letter-spacing:1px;cursor:pointer;transition:all .2s;white-space:nowrap;}
@@ -707,11 +707,11 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
       onfocus="if(this.value.trim()) { document.getElementById('search-results').style.display='block'; _positionSearchDrop(); }">
   </div>
   <button class="toolbar-btn" id="unit-btn" onclick="toggleUnit()">°C / °F</button>
-  <button class="toolbar-btn" id="dark-btn" onclick="toggleDark()">🌙 Dark</button>
-  <button class="toolbar-btn" id="compare-btn" onclick="toggleCompare()">⚖️ Compare</button>
-  <button class="toolbar-btn" onclick="toggleNotifications()">🔔 Alerts</button>
+  <button class="toolbar-btn" id="dark-btn" onclick="toggleDark()"><span class="lang-en">🌙 Dark</span><span class="lang-te">🌙 చీకటి</span><span class="lang-hi">🌙 डार्क</span></button>
+  <button class="toolbar-btn" id="compare-btn" onclick="toggleCompare()"><span class="lang-en">⚖️ Compare</span><span class="lang-te">⚖️ పోలిక</span><span class="lang-hi">⚖️ तुलना</span></button>
+  <button class="toolbar-btn" onclick="toggleNotifications()"><span class="lang-en">🔔 Alerts</span><span class="lang-te">🔔 హెచ్చరికలు</span><span class="lang-hi">🔔 चेतावनी</span></button>
   <button class="toolbar-btn" id="lang-btn" onclick="toggleLang()" title="Language / భాష">🌐 EN</button>
-  <button class="toolbar-btn" id="install-btn" onclick="installPWA()" style="display:none;" title="Install App">📲 Install</button>
+  <button class="toolbar-btn" id="install-btn" onclick="installPWA()" style="display:none;" title="Install App">📲 <span class="lang-en">Install</span><span class="lang-te">ఇన్‌స్టాల్</span><span class="lang-hi">इंस्टॉल</span></button>
 </div>
 
 <!-- CLOCKS -->
@@ -852,13 +852,13 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
     <div class="chart-toolbar">
       <div class="chart-title">Live Temperature Trend</div>
       <div class="chart-tabs">
-        <button class="chart-tab active" onclick="setChartMode('temp',this)">🌡 Temp</button>
+        <button class="chart-tab active" onclick="setChartMode('temp',this)" data-i18n="temp_chart">🌡 Temp</button>
         <button class="chart-tab" onclick="setChartMode('humidity',this)" data-i18n="hum_chart">💧 Humidity</button>
         <button class="chart-tab" onclick="setChartMode('wind',this)" data-i18n="wind_chart">💨 Wind</button>
       </div>
     </div>
     <div class="chart-stats-row">
-      <div class="chart-stat"><div class="chart-stat-label">Current</div><div class="chart-stat-value" id="cs-current">--°</div></div>
+      <div class="chart-stat"><div class="chart-stat-label" data-i18n="current">Current</div><div class="chart-stat-value" id="cs-current">--°</div></div>
       <div class="chart-stat"><div class="chart-stat-label">High</div><div class="chart-stat-value" id="cs-high" style="color:#f44336;">--°</div></div>
       <div class="chart-stat"><div class="chart-stat-label">Low</div><div class="chart-stat-value" id="cs-low" style="color:#2196f3;">--°</div></div>
       <div class="chart-stat"><div class="chart-stat-label">Average</div><div class="chart-stat-value" id="cs-avg" style="color:#aaa;">--°</div></div>
@@ -974,8 +974,8 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
       <div class="card-stats">
         <div><div class="card-stat-label" data-i18n="humidity">Humidity</div><div class="card-stat-value">{{ w.humidity }}%</div></div>
         <div><div class="card-stat-label" data-i18n="wind">Wind</div><div class="card-stat-value">{{ w.wind_speed }} km/h</div></div>
-        <div><div class="card-stat-label">UV</div><div class="card-stat-value">{{ w.uv_index }}</div></div>
-        <div><div class="card-stat-label">Pressure</div><div class="card-stat-value">{{ w.pressure }}</div></div>
+        <div><div class="card-stat-label" data-i18n="uv">UV Index</div><div class="card-stat-value">{{ w.uv_index }}</div></div>
+        <div><div class="card-stat-label" data-i18n="pressure">Pressure</div><div class="card-stat-value">{{ w.pressure }}</div></div>
       </div>
     </div>
     {% endfor %}
@@ -1086,12 +1086,20 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
   <div class="footer-info">
     <div>Powered by Open-Meteo · Flask · Python</div>
     <div>Data: ECMWF · NOAA GFS · DWD ICON</div>
-    <div>Refreshes every 60 seconds</div>
+    <div data-i18n="footer_tagline">Real-time weather intelligence</div>
   </div>
 </footer>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
+// Create search dropdown as direct child of body — avoids ALL stacking context issues
+(function createSearchPortal() {
+  const el = document.createElement('div');
+  el.id = 'search-results';
+  el.style.cssText = 'display:none;position:fixed;z-index:2147483647;background:#1a1a22;border:1px solid rgba(255,255,255,.15);border-radius:8px;max-height:340px;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.9);min-width:300px;pointer-events:auto;';
+  document.body.appendChild(el);
+})();
+
 let currentCity = null;
 let isCelsius = true;
 let allCities = [];
@@ -2093,14 +2101,14 @@ function loadCompare() {
       <div class="compare-city">
         <div class="compare-city-name">${w.city} ${w.icon}</div>
         <div class="compare-temp">${dispTemp(w.temp)}</div>
-        <div class="compare-row"><span>Condition</span><span>${w.condition}</span></div>
-        <div class="compare-row"><span>Humidity</span><span>${w.humidity}%</span></div>
-        <div class="compare-row"><span>Wind</span><span>${w.wind_speed} km/h</span></div>
-        <div class="compare-row"><span>UV Index</span><span>${w.uv_index}</span></div>
+        <div class="compare-row"><span>${t('condition')}</span><span>${w.condition}</span></div>
+        <div class="compare-row"><span>${t('humidity')}</span><span>${w.humidity}%</span></div>
+        <div class="compare-row"><span>${t('wind')}</span><span>${w.wind_speed} km/h</span></div>
+        <div class="compare-row"><span>${t('uv')}</span><span>${w.uv_index}</span></div>
         <div class="compare-row"><span>AQI</span><span style="color:${w.aqi_color}">${w.aqi} · ${w.aqi_label}</span></div>
-        <div class="compare-row"><span>Rain Prob.</span><span>${w.rain_prob}%</span></div>
-        <div class="compare-row"><span>Sunrise</span><span>${w.sunrise}</span></div>
-        <div class="compare-row"><span>Sunset</span><span>${w.sunset}</span></div>
+        <div class="compare-row"><span>${t('rain_label')}</span><span>${w.rain_prob}%</span></div>
+        <div class="compare-row"><span>${t('sunrise')}</span><span>${w.sunrise}</span></div>
+        <div class="compare-row"><span>${t('sunset')}</span><span>${w.sunset}</span></div>
       </div>`;
   });
 }
@@ -2830,6 +2838,12 @@ const T = {
     footer_tagline: 'Real-time weather intelligence',
     alerts_title:   '⚡ Active Weather Alerts',
     no_alerts:      'No active alerts. All clear ✅',
+    current:        'Current',
+    temp_chart:     '🌡 Temp',
+    dark_mode:      '🌙 Dark',
+    compare:        '⚖️ Compare',
+    condition:      'Condition',
+    rain_label:     'Rain Prob.',
   },
   te: {
     tagline:        'ప్రపంచ వాతావరణ వేదిక',
@@ -2865,6 +2879,12 @@ const T = {
     footer_tagline: 'రియల్-టైమ్ వాతావరణ సమాచారం',
     alerts_title:   '⚡ వాతావరణ హెచ్చరికలు',
     no_alerts:      'హెచ్చరికలు లేవు ✅',
+    current:        'ప్రస్తుతం',
+    temp_chart:     '🌡 ఉష్ణోగ్రత',
+    dark_mode:      '🌙 చీకటి',
+    compare:        '⚖️ పోలిక',
+    condition:      'పరిస్థితి',
+    rain_label:     'వర్షం %',
   },
   hi: {
     tagline:        'वैश्विक मौसम केंद्र',
@@ -2900,6 +2920,12 @@ const T = {
     footer_tagline: 'रियल-टाइम मौसम जानकारी',
     alerts_title:   '⚡ मौसम चेतावनियां',
     no_alerts:      'कोई चेतावनी नहीं ✅',
+    current:        'वर्तमान',
+    temp_chart:     '🌡 तापमान',
+    dark_mode:      '🌙 डार्क',
+    compare:        '⚖️ तुलना',
+    condition:      'स्थिति',
+    rain_label:     'बारिश %',
   },
 };
 
@@ -2931,6 +2957,15 @@ function applyTranslations() {
   if (lu && !lu.textContent.includes('Updating')) {
     const time = lu.textContent.split(':').slice(1).join(':').trim();
     if (time) lu.textContent = t('last_updated') + ': ' + time;
+  }
+  // Re-render compare panel if open (so labels update)
+  const cp = document.getElementById('compare-panel');
+  if (cp && cp.style.display !== 'none') loadCompare();
+  // Update forecast label lang part
+  const fcl = document.getElementById('forecast-label');
+  if (fcl) {
+    const city = fcl.textContent.split('·')[1]?.trim() || '';
+    fcl.textContent = t('forecast') + (city ? ' · ' + city : '');
   }
 }
 
@@ -3045,8 +3080,6 @@ function toggleNotifications() {
 // Run alerts on initial data
 if (allCities && allCities.length) updateAlertsPanel(allCities);
 </script>
-<!-- Search results portal — appended to body so z-index works above everything -->
-<div id="search-results" style="display:none;"></div>
 </body>
 </html>
 """
