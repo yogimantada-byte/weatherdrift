@@ -362,7 +362,7 @@ header{background:rgba(10,10,15,.96);backdrop-filter:blur(20px);-webkit-backdrop
 .search-wrap input::placeholder{color:#666;}
 .search-wrap input:focus{border-color:var(--accent);}
 .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:.9rem;pointer-events:none;}
-#search-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#1a1a22;border:1px solid rgba(255,255,255,.1);border-radius:6px;z-index:1200;max-height:280px;overflow-y:auto;display:none;box-shadow:0 8px 32px rgba(0,0,0,.6);}
+#search-results{position:fixed;background:#1a1a22;border:1px solid rgba(255,255,255,.15);border-radius:8px;z-index:9000;max-height:320px;overflow-y:auto;display:none;box-shadow:0 12px 40px rgba(0,0,0,.8);min-width:280px;}
 .search-result-item{padding:10px 14px;font-family:'Space Mono',monospace;font-size:.7rem;color:#ccc;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.05);}
 .search-result-item:hover{background:rgba(232,68,26,.15);color:white;}
 .toolbar-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:7px 14px;color:#ccc;font-family:'Space Mono',monospace;font-size:.68rem;letter-spacing:1px;cursor:pointer;transition:all .2s;white-space:nowrap;}
@@ -700,7 +700,10 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 <div class="toolbar">
   <div class="search-wrap">
     <span class="search-icon">🔍</span>
-    <input type="text" id="city-search" placeholder="Search any city..." autocomplete="off" oninput="handleSearch(this.value)">
+    <input type="text" id="city-search" placeholder="Search any city..."
+      autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+      role="combobox" aria-autocomplete="list" aria-expanded="false"
+      oninput="handleSearch(this.value)">
     <div id="search-results"></div>
   </div>
   <button class="toolbar-btn" id="unit-btn" onclick="toggleUnit()">°C / °F</button>
@@ -1155,6 +1158,16 @@ let _searchTimer  = null;
 let _searchResults = [];
 
 function handleSearch(q) {
+  // Position dropdown using fixed coords so it floats above clocks-bar/ticker
+  (function _positionDropdown() {
+    const inp  = document.getElementById('city-search');
+    const drop = document.getElementById('search-results');
+    if (!inp || !drop) return;
+    const r = inp.getBoundingClientRect();
+    drop.style.top   = (r.bottom + 4) + 'px';
+    drop.style.left  = r.left + 'px';
+    drop.style.width = r.width + 'px';
+  })();
   clearTimeout(_searchTimer);
   const box = document.getElementById('search-results');
   if (!q || !q.trim()) { box.style.display='none'; return; }
