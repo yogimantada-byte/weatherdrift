@@ -362,7 +362,7 @@ header{background:rgba(10,10,15,.96);backdrop-filter:blur(20px);-webkit-backdrop
 .search-wrap input::placeholder{color:#666;}
 .search-wrap input:focus{border-color:var(--accent);}
 .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:.9rem;pointer-events:none;}
-#search-results{position:fixed;background:#1a1a22;border:1px solid rgba(255,255,255,.15);border-radius:8px;z-index:9000;max-height:320px;overflow-y:auto;display:none;box-shadow:0 12px 40px rgba(0,0,0,.8);min-width:280px;}
+#search-results{position:fixed;background:#1a1a22;border:1px solid rgba(255,255,255,.15);border-radius:8px;z-index:9999;max-height:340px;overflow-y:auto;display:none;box-shadow:0 12px 40px rgba(0,0,0,.85);min-width:300px;pointer-events:auto;}
 .search-result-item{padding:10px 14px;font-family:'Space Mono',monospace;font-size:.7rem;color:#ccc;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.05);}
 .search-result-item:hover{background:rgba(232,68,26,.15);color:white;}
 .toolbar-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:7px 14px;color:#ccc;font-family:'Space Mono',monospace;font-size:.68rem;letter-spacing:1px;cursor:pointer;transition:all .2s;white-space:nowrap;}
@@ -685,11 +685,11 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
   <div class="logo-block">
     <div>
       <div class="logo">AHOY Weather<span>Drift</span></div>
-      <div class="tagline">Global Atmospheric Intelligence</div>
+      <div class="tagline" data-i18n="tagline">Global Atmospheric Intelligence</div>
     </div>
   </div>
   <div class="header-meta">
-    <div class="live-badge"><span class="live-dot"></span> LIVE</div>
+    <div class="live-badge"><span class="live-dot"></span> <span data-i18n="live">LIVE</span></div>
     <div>{{ datetime }}</div>
     <div>{{ total_cities }} cities monitored</div>
     <div id="last-updated-label" style="color:#e8441a;font-size:.6rem;">Last updated: {{ last_updated }}</div>
@@ -703,8 +703,8 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
     <input type="text" id="city-search" placeholder="Search any city..."
       autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
       role="combobox" aria-autocomplete="list" aria-expanded="false"
-      oninput="handleSearch(this.value)">
-    <div id="search-results"></div>
+      oninput="handleSearch(this.value)"
+      onfocus="if(this.value.trim()) { document.getElementById('search-results').style.display='block'; _positionSearchDrop(); }">
   </div>
   <button class="toolbar-btn" id="unit-btn" onclick="toggleUnit()">°C / °F</button>
   <button class="toolbar-btn" id="dark-btn" onclick="toggleDark()">🌙 Dark</button>
@@ -739,7 +739,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 
 <!-- COMPARE PANEL -->
 <div class="compare-panel" id="compare-panel">
-  <div class="section-label">⚖️ City Comparison</div>
+  <div class="section-label" data-i18n="compare">⚖️ City Comparison</div>
   <div class="compare-grid">
     <div>
       <select class="compare-select" id="compare-a" onchange="loadCompare()">
@@ -774,7 +774,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 
 <!-- FEATURED -->
 <section class="featured-section">
-  <div class="section-label">Featured City <span id="featured-loading" style="display:none;color:var(--accent);font-size:.7rem;">· Loading...</span></div>
+  <div class="section-label"><span data-i18n="featured">Featured City</span> <span id="featured-loading" style="display:none;color:var(--accent);font-size:.7rem;" data-i18n="loading">· Loading...</span></div>
   <div class="featured-card" id="featured-card">
     <div class="weather-bg" id="weather-bg"></div>
     <div>
@@ -794,8 +794,8 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 
       <!-- Sun times -->
       <div class="sun-row">
-        <div class="sun-item">🌅 Sunrise <span id="feat-sunrise">{{ featured.sunrise }}</span></div>
-        <div class="sun-item">🌇 Sunset <span id="feat-sunset">{{ featured.sunset }}</span></div>
+        <div class="sun-item"><span data-i18n="sunrise">🌅 Sunrise</span> <span id="feat-sunrise">{{ featured.sunrise }}</span></div>
+        <div class="sun-item"><span data-i18n="sunset">🌇 Sunset</span> <span id="feat-sunset">{{ featured.sunset }}</span></div>
       </div>
 
       <!-- Rain gauge -->
@@ -809,15 +809,15 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
           </svg>
           <div class="rain-pct" id="feat-rain-pct">{{ featured.rain_prob }}%</div>
         </div>
-        <div style="font-family:'Space Mono',monospace;font-size:.65rem;color:#aaa;">Rain<br>Probability</div>
+        <div style="font-family:'Space Mono',monospace;font-size:.65rem;color:#aaa;" data-i18n="rain_prob">Rain Probability</div>
       </div>
 
       <div class="stats-row">
-        <div class="stat"><span class="stat-label">Humidity</span><span class="stat-value" id="feat-humidity">{{ featured.humidity }}%</span></div>
-        <div class="stat"><span class="stat-label">Wind</span><span class="stat-value" id="feat-wind">{{ featured.wind_speed }} km/h</span></div>
-        <div class="stat"><span class="stat-label">UV Index</span><span class="stat-value" id="feat-uv">{{ featured.uv_index }}</span></div>
-        <div class="stat"><span class="stat-label">Pressure</span><span class="stat-value" id="feat-pressure">{{ featured.pressure }} hPa</span></div>
-        <div class="stat"><span class="stat-label">Visibility</span><span class="stat-value" id="feat-visibility">{{ featured.visibility }} km</span></div>
+        <div class="stat"><span class="stat-label" data-i18n="humidity">Humidity</span><span class="stat-value" id="feat-humidity">{{ featured.humidity }}%</span></div>
+        <div class="stat"><span class="stat-label" data-i18n="wind">Wind</span><span class="stat-value" id="feat-wind">{{ featured.wind_speed }} km/h</span></div>
+        <div class="stat"><span class="stat-label" data-i18n="uv">UV Index</span><span class="stat-value" id="feat-uv">{{ featured.uv_index }}</span></div>
+        <div class="stat"><span class="stat-label" data-i18n="pressure">Pressure</span><span class="stat-value" id="feat-pressure">{{ featured.pressure }} hPa</span></div>
+        <div class="stat"><span class="stat-label" data-i18n="visibility">Visibility</span><span class="stat-value" id="feat-visibility">{{ featured.visibility }} km</span></div>
       </div>
 
       <!-- Hourly forecast -->
@@ -847,14 +847,14 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 
 <!-- HISTORY CHART -->
 <section class="history-section">
-  <div class="section-label">📈 Temperature History — <span id="history-city-label">{{ featured.city }}</span></div>
+  <div class="section-label"><span data-i18n="history">📈 Temperature History</span> — <span id="history-city-label">{{ featured.city }}</span></div>
   <div class="chart-outer">
     <div class="chart-toolbar">
       <div class="chart-title">Live Temperature Trend</div>
       <div class="chart-tabs">
         <button class="chart-tab active" onclick="setChartMode('temp',this)">🌡 Temp</button>
-        <button class="chart-tab" onclick="setChartMode('humidity',this)">💧 Humidity</button>
-        <button class="chart-tab" onclick="setChartMode('wind',this)">💨 Wind</button>
+        <button class="chart-tab" onclick="setChartMode('humidity',this)" data-i18n="hum_chart">💧 Humidity</button>
+        <button class="chart-tab" onclick="setChartMode('wind',this)" data-i18n="wind_chart">💨 Wind</button>
       </div>
     </div>
     <div class="chart-stats-row">
@@ -876,7 +876,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 
 <!-- FORECAST -->
 <section class="forecast-section">
-  <div class="section-label" id="forecast-label">7-Day Outlook · {{ featured.city }}</div>
+  <div class="section-label" id="forecast-label"><span data-i18n="forecast">7-Day Outlook</span> · {{ featured.city }}</div>
   <div class="forecast-strip" id="forecast-strip">
     {% for day in forecast %}
     <div class="forecast-day">
@@ -892,7 +892,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 
 <!-- WORLD MAP -->
 <section class="map-section">
-  <div class="section-label">🗺️ World Weather Map</div>
+  <div class="section-label" data-i18n="map">🗺️ World Weather Map</div>
   <div class="map-outer" style="isolation:isolate;">
     <div class="map-toolbar" style="flex-direction:column;align-items:stretch;gap:10px;">
       <!-- Row 1: view toggles + search + zoom -->
@@ -972,8 +972,8 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
         <span class="badge badge-rain">💧{{ w.rain_prob }}%</span>
       </div>
       <div class="card-stats">
-        <div><div class="card-stat-label">Humidity</div><div class="card-stat-value">{{ w.humidity }}%</div></div>
-        <div><div class="card-stat-label">Wind</div><div class="card-stat-value">{{ w.wind_speed }} km/h</div></div>
+        <div><div class="card-stat-label" data-i18n="humidity">Humidity</div><div class="card-stat-value">{{ w.humidity }}%</div></div>
+        <div><div class="card-stat-label" data-i18n="wind">Wind</div><div class="card-stat-value">{{ w.wind_speed }} km/h</div></div>
         <div><div class="card-stat-label">UV</div><div class="card-stat-value">{{ w.uv_index }}</div></div>
         <div><div class="card-stat-label">Pressure</div><div class="card-stat-value">{{ w.pressure }}</div></div>
       </div>
@@ -987,7 +987,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 <!-- ADD CUSTOM CITY -->
 <!-- RESTORE CITIES -->
 <section class="add-city-section" id="restore-section" style="margin-top:60px;display:none;">
-  <div class="section-label">♻️ Restore Removed Cities</div>
+  <div class="section-label" data-i18n="restore">♻️ Restore Removed Cities</div>
   <div style="background:var(--card-bg);border:2px solid var(--border);padding:24px;">
     <div id="restore-list" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
     <div id="restore-empty" style="font-family:monospace;font-size:.7rem;color:#666;">No cities have been removed.</div>
@@ -995,13 +995,13 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
 </section>
 
 <section class="add-city-section" style="margin-top:60px;">
-  <div class="section-label">➕ Add Location</div>
+  <div class="section-label" data-i18n="addloc">➕ Add Location</div>
   <div style="background:var(--card-bg);border:2px solid var(--border);padding:30px;">
 
     <!-- Mode toggle -->
     <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
-      <button class="chart-tab active" id="mode-search" onclick="setAddMode('search')">🔍 Quick Search</button>
-      <button class="chart-tab" id="mode-browse" onclick="setAddMode('browse')">🗂 Browse by Region</button>
+      <button class="chart-tab active" id="mode-search" onclick="setAddMode('search')" data-i18n="quick_search">🔍 Quick Search</button>
+      <button class="chart-tab" id="mode-browse" onclick="setAddMode('browse')" data-i18n="browse_region">🗂 Browse by Region</button>
     </div>
 
     <!-- QUICK SEARCH MODE -->
@@ -1011,7 +1011,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
       </div>
       <div class="add-city-form">
         <div class="form-group" style="flex:1;min-width:220px;position:relative;">
-          <label class="form-label">Place Name</label>
+          <label class="form-label" data-i18n="place_name">Place Name</label>
           <input class="form-input" id="add-city-name" placeholder="e.g. Korlakota, Naupada, Etcherla..."
             type="text" autocomplete="off" oninput="geocodeSearch(this.value)" style="width:100%;">
           <div id="geocode-results" style="
@@ -1031,7 +1031,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
             style="width:110px;background:rgba(0,0,0,.1);color:var(--muted);cursor:not-allowed;">
         </div>
         <button class="btn-add" id="add-city-btn" onclick="addCustomCity()" disabled
-          style="opacity:.5;cursor:not-allowed;">+ Add</button>
+          style="opacity:.5;cursor:not-allowed;" data-i18n="add_btn">+ Add</button>
       </div>
     </div>
 
@@ -1157,21 +1157,26 @@ updateClocks(); setInterval(updateClocks, 1000);
 let _searchTimer  = null;
 let _searchResults = [];
 
+// Reposition search dropdown — position:fixed so viewport-relative, always above everything
+function _positionSearchDrop() {
+  const inp = document.getElementById('city-search');
+  const box = document.getElementById('search-results');
+  if (!inp || !box) return;
+  const r = inp.getBoundingClientRect();
+  box.style.top   = (r.bottom + 4) + 'px';   // viewport-relative, no scrollY needed
+  box.style.left  = r.left + 'px';
+  box.style.width = Math.max(r.width, 300) + 'px';
+}
+// Reposition on scroll/resize
+window.addEventListener('scroll', _positionSearchDrop, true);
+window.addEventListener('resize', _positionSearchDrop);
+
 function handleSearch(q) {
-  // Position dropdown using fixed coords so it floats above clocks-bar/ticker
-  (function _positionDropdown() {
-    const inp  = document.getElementById('city-search');
-    const drop = document.getElementById('search-results');
-    if (!inp || !drop) return;
-    const r = inp.getBoundingClientRect();
-    drop.style.top   = (r.bottom + 4) + 'px';
-    drop.style.left  = r.left + 'px';
-    drop.style.width = r.width + 'px';
-  })();
   clearTimeout(_searchTimer);
   const box = document.getElementById('search-results');
   if (!q || !q.trim()) { box.style.display='none'; return; }
   box.style.display='block';
+  _positionSearchDrop();   // position AFTER display:block so rect is valid
 
   const ql = q.toLowerCase();
   const local = allCities.filter(c => c.city && c.city.toLowerCase().includes(ql)).slice(0, 4);
@@ -1294,8 +1299,8 @@ function updateFeaturedPanel(d) {
   // Use rich subtitle (district/state/country) if provided by map click, else country label
   const subtitle = d._subtitle || '';
   const countryLine = subtitle || cLabel;
-  document.getElementById('feat-country').textContent = countryLine + ' · Updated just now';
-  document.getElementById('feat-condition').textContent = safe(d.condition)+' — Feels like '+(isCelsius?safe(d.feels_like,'°C'):toF(d.feels_like)+'°F');
+  document.getElementById('feat-country').textContent = countryLine + ' · ' + t('updated');
+  document.getElementById('feat-condition').textContent = safe(d.condition)+' — '+t('feels_like')+' '+(isCelsius?safe(d.feels_like,'°C'):toF(d.feels_like)+'°F');
   const tempEl = document.getElementById('feat-temp');
   tempEl.textContent = dispTemp(d.temp);
   tempEl.dataset.rawc = d.temp;
@@ -1982,7 +1987,7 @@ if (typeof L !== 'undefined') {
 function updateForecast(cityName, fc) {
   // Update section label with location name
   const label = document.getElementById('forecast-label');
-  if (label) label.textContent = '7-Day Outlook · ' + (cityName || '—');
+  if (label) label.textContent = t('forecast') + ' · ' + (cityName || '—');
 
   const strip = document.getElementById('forecast-strip');
   if (!strip) return;
@@ -2789,12 +2794,153 @@ const LANGS = ['en', 'te', 'hi'];
 const LANG_LABELS = { en: '🌐 EN', te: '🌐 తె', hi: '🌐 हि' };
 let _currentLang = localStorage.getItem('wd-lang') || 'en';
 
+// All UI string translations
+const T = {
+  en: {
+    tagline:        'Global Atmospheric Intelligence',
+    live:           'LIVE',
+    featured:       'Featured City',
+    loading:        '· Loading...',
+    history:        '📈 Temperature History',
+    forecast:       '7-Day Outlook',
+    map:            '🗺️ World Weather Map',
+    restore:        '♻️ Restore Removed Cities',
+    addloc:         '➕ Add Location',
+    compare:        '⚖️ City Comparison',
+    humidity:       'Humidity',
+    wind:           'Wind',
+    uv:             'UV Index',
+    pressure:       'Pressure',
+    visibility:     'Visibility',
+    sunrise:        '🌅 Sunrise',
+    sunset:         '🌇 Sunset',
+    rain_prob:      'Rain Probability',
+    feels_like:     'Feels like',
+    updated:        'Updated just now',
+    last_updated:   'Last updated',
+    search_ph:      'Search any city...',
+    temp_chart:     '🌡️ Temp',
+    hum_chart:      '💧 Humidity',
+    wind_chart:     '💨 Wind',
+    quick_search:   '🔍 Quick Search',
+    browse_region:  '🗂 Browse by Region',
+    place_name:     'Place Name',
+    add_btn:        '+ Add',
+    footer_cities:  'cities monitored',
+    footer_tagline: 'Real-time weather intelligence',
+    alerts_title:   '⚡ Active Weather Alerts',
+    no_alerts:      'No active alerts. All clear ✅',
+  },
+  te: {
+    tagline:        'ప్రపంచ వాతావరణ వేదిక',
+    live:           'లైవ్',
+    featured:       'ఎంచుకున్న నగరం',
+    loading:        '· లోడవుతోంది...',
+    history:        '📈 ఉష్ణోగ్రత చరిత్ర',
+    forecast:       '7 రోజుల అంచనా',
+    map:            '🗺️ ప్రపంచ వాతావరణ మ్యాప్',
+    restore:        '♻️ తొలగించిన నగరాలను పునరుద్ధరించు',
+    addloc:         '➕ స్థానం జోడించు',
+    compare:        '⚖️ నగర పోలిక',
+    humidity:       'తేమ',
+    wind:           'గాలి వేగం',
+    uv:             'UV సూచిక',
+    pressure:       'పీడనం',
+    visibility:     'దృశ్యమానత',
+    sunrise:        '🌅 సూర్యోదయం',
+    sunset:         '🌇 సూర్యాస్తమయం',
+    rain_prob:      'వర్షం సంభావ్యత',
+    feels_like:     'అనుభవమయ్యే',
+    updated:        'ఇప్పుడే నవీకరించబడింది',
+    last_updated:   'చివరిగా నవీకరించబడింది',
+    search_ph:      'ఏ నగరైనా వెతకండి...',
+    temp_chart:     '🌡️ ఉష్ణోగ్రత',
+    hum_chart:      '💧 తేమ',
+    wind_chart:     '💨 గాలి',
+    quick_search:   '🔍 త్వరిత శోధన',
+    browse_region:  '🗂 ప్రాంతం చూడు',
+    place_name:     'స్థల పేరు',
+    add_btn:        '+ జోడించు',
+    footer_cities:  'నగరాలు పర్యవేక్షించబడుతున్నాయి',
+    footer_tagline: 'రియల్-టైమ్ వాతావరణ సమాచారం',
+    alerts_title:   '⚡ వాతావరణ హెచ్చరికలు',
+    no_alerts:      'హెచ్చరికలు లేవు ✅',
+  },
+  hi: {
+    tagline:        'वैश्विक मौसम केंद्र',
+    live:           'लाइव',
+    featured:       'चुना हुआ शहर',
+    loading:        '· लोड हो रहा है...',
+    history:        '📈 तापमान इतिहास',
+    forecast:       '7 दिन का पूर्वानुमान',
+    map:            '🗺️ विश्व मौसम मानचित्र',
+    restore:        '♻️ हटाए गए शहर वापस लाएं',
+    addloc:         '➕ स्थान जोड़ें',
+    compare:        '⚖️ शहर तुलना',
+    humidity:       'नमी',
+    wind:           'हवा',
+    uv:             'UV सूचकांक',
+    pressure:       'दबाव',
+    visibility:     'दृश्यता',
+    sunrise:        '🌅 सूर्योदय',
+    sunset:         '🌇 सूर्यास्त',
+    rain_prob:      'बारिश की संभावना',
+    feels_like:     'महसूस होता है',
+    updated:        'अभी अपडेट किया',
+    last_updated:   'अंतिम अपडेट',
+    search_ph:      'कोई भी शहर खोजें...',
+    temp_chart:     '🌡️ तापमान',
+    hum_chart:      '💧 नमी',
+    wind_chart:     '💨 हवा',
+    quick_search:   '🔍 त्वरित खोज',
+    browse_region:  '🗂 क्षेत्र देखें',
+    place_name:     'स्थान का नाम',
+    add_btn:        '+ जोड़ें',
+    footer_cities:  'शहर निगरानी में',
+    footer_tagline: 'रियल-टाइम मौसम जानकारी',
+    alerts_title:   '⚡ मौसम चेतावनियां',
+    no_alerts:      'कोई चेतावनी नहीं ✅',
+  },
+};
+
+// Helper: get translation
+function t(key) { return (T[_currentLang] || T.en)[key] || (T.en)[key] || key; }
+
+// Apply all translations to DOM
+function applyTranslations() {
+  // Static text elements via data-i18n attribute
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (T[_currentLang] && T[_currentLang][key]) el.textContent = T[_currentLang][key];
+    else if (T.en[key]) el.textContent = T.en[key];
+  });
+  // Placeholder
+  const si = document.getElementById('city-search');
+  if (si) si.placeholder = t('search_ph');
+  // Featured loading text
+  const fl = document.getElementById('featured-loading');
+  if (fl) fl.textContent = t('loading');
+  // Forecast label (keep city name)
+  const fc = document.getElementById('forecast-label');
+  if (fc) {
+    const city = fc.textContent.split('·')[1]?.trim() || '';
+    fc.textContent = t('forecast') + (city ? ' · ' + city : '');
+  }
+  // Last updated label
+  const lu = document.getElementById('last-updated-label');
+  if (lu && !lu.textContent.includes('Updating')) {
+    const time = lu.textContent.split(':').slice(1).join(':').trim();
+    if (time) lu.textContent = t('last_updated') + ': ' + time;
+  }
+}
+
 function applyLang(lang) {
   _currentLang = lang;
   localStorage.setItem('wd-lang', lang);
   document.documentElement.setAttribute('data-lang', lang);
   const btn = document.getElementById('lang-btn');
   if (btn) btn.textContent = LANG_LABELS[lang] || '🌐 EN';
+  applyTranslations();
 }
 
 function toggleLang() {
@@ -2899,6 +3045,8 @@ function toggleNotifications() {
 // Run alerts on initial data
 if (allCities && allCities.length) updateAlertsPanel(allCities);
 </script>
+<!-- Search results portal — appended to body so z-index works above everything -->
+<div id="search-results" style="display:none;"></div>
 </body>
 </html>
 """
