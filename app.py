@@ -335,7 +335,7 @@ body.dark {
   --glass:rgba(255,255,255,.04); --glass-border:rgba(255,255,255,.08);
 }
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;overflow-x:hidden;transition:background .3s,color .3s;position:relative;}
+html{overflow-x:hidden;}body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;transition:background .3s,color .3s;position:relative;}
 body.dark{background:var(--paper);}
 body.dark::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% -20%,rgba(232,68,26,.08) 0%,transparent 60%);pointer-events:none;z-index:0;}
 body>*{position:relative;z-index:1;}
@@ -1164,10 +1164,10 @@ function _positionSearchDrop() {
   const inp = document.getElementById('city-search');
   const box = document.getElementById('search-results');
   if (!inp || !box) return;
-  document.body.appendChild(box);  // always last DOM node = always on top
+  document.body.appendChild(box);  // always last DOM node
   const r = inp.getBoundingClientRect();
-  box.style.top   = (r.bottom + window.scrollY + 4) + 'px';
-  box.style.left  = (r.left   + window.scrollX) + 'px';
+  box.style.top   = (r.bottom + 4) + 'px';  // fixed = viewport coords, no scrollY
+  box.style.left  = r.left + 'px';
   box.style.width = Math.max(r.width, 300) + 'px';
 }
 // Reposition on scroll/resize
@@ -2786,7 +2786,7 @@ if (typeof twemoji!=='undefined') {
   el.id = 'search-results';
   Object.assign(el.style, {
     display:    'none',
-    position:   'absolute',               // absolute on body avoids backdrop-filter trap
+    position:   'fixed',                  // fixed from viewport — body overflow-x no longer traps it
     zIndex:     '2147483647',
     background: '#1a1a22',
     border:     '1px solid rgba(255,255,255,.15)',
