@@ -356,7 +356,7 @@ header{background:rgba(10,10,15,.96);backdrop-filter:blur(20px);-webkit-backdrop
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* ── TOOLBAR ── */
-.toolbar{background:var(--toolbar-bg);padding:10px 40px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,.06);position:relative;z-index:900;}
+.toolbar{background:var(--toolbar-bg);padding:10px 40px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,.06);position:relative;z-index:500;}
 .search-wrap{position:relative;flex:1;min-width:200px;max-width:360px;overflow:visible;}
 .search-wrap input{width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:8px 14px 8px 36px;color:#f2ede6;font-family:'Space Mono',monospace;font-size:.72rem;letter-spacing:1px;outline:none;transition:border .2s;}
 .search-wrap input::placeholder{color:#666;}
@@ -714,7 +714,8 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
   <button class="toolbar-btn" id="install-btn" onclick="installPWA()" style="display:none;" title="Install App">📲 <span class="lang-en">Install</span><span class="lang-te">ఇన్‌స్టాల్</span><span class="lang-hi">इंस्टॉल</span></button>
 </div>
 
-<!-- CLOCKS -->
+<!-- CLOCKS + TICKER wrapped in low-z container so search dropdown always above -->
+<div style="position:relative;z-index:1;">
 <div class="clocks-bar">
   <div class="clock-item"><span class="clock-flag">🇮🇳</span><div class="clock-info"><span class="clock-country">India (IST)</span><span class="clock-time" id="clock-IN">--:--:--</span><span class="clock-date" id="date-IN">---</span></div></div>
   <div class="clock-item"><span class="clock-flag">🇯🇵</span><div class="clock-info"><span class="clock-country">Japan (JST)</span><span class="clock-time" id="clock-JP">--:--:--</span><span class="clock-date" id="date-JP">---</span></div></div>
@@ -733,7 +734,7 @@ img.emoji{height:1.2em;width:1.2em;vertical-align:middle;display:inline-block;}
     <span class="ticker-item">{{ w.icon }} {{ w.city }} {{ w.temp }}°C · {{ w.condition }}</span>
     {% endfor %}
   </div>
-</div>
+</div><!-- end low-z container -->
 
 <main>
 
@@ -1163,15 +1164,10 @@ function _positionSearchDrop() {
   const inp = document.getElementById('city-search');
   const box = document.getElementById('search-results');
   if (!inp || !box) return;
-  // Re-append to body so it is always the LAST DOM element painted
-  if (box.parentElement !== document.body) document.body.appendChild(box);
-  // Move to end of body even if already there (ensures last paint order)
-  document.body.appendChild(box);
-  const r   = inp.getBoundingClientRect();
-  const top = r.bottom + window.scrollY + 4;
-  const lft = r.left   + window.scrollX;
-  box.style.top   = top + 'px';
-  box.style.left  = lft + 'px';
+  document.body.appendChild(box);  // always last DOM node = always on top
+  const r = inp.getBoundingClientRect();
+  box.style.top   = (r.bottom + window.scrollY + 4) + 'px';
+  box.style.left  = (r.left   + window.scrollX) + 'px';
   box.style.width = Math.max(r.width, 300) + 'px';
 }
 // Reposition on scroll/resize
