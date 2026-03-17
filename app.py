@@ -1,5 +1,6 @@
 from flask import Flask, render_template_string, jsonify, request
 import requests, json, random, time, threading, math, os
+session = requests.Session()
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
@@ -13,7 +14,10 @@ def _load_data():
     global _custom_cities, _deleted_cities
     if os.path.exists(DATA_FILE):
         try:
-            d = json.load(open(DATA_FILE))
+            with open(DATA_FILE, "r") as f:
+             d = json.load(f)
+             with open(DATA_FILE, "w") as f:
+              json.dump({...}, f, indent=2)
             _custom_cities  = d.get("custom_cities",  {})
             _deleted_cities = set(d.get("deleted_cities", []))
         except Exception:
@@ -149,7 +153,7 @@ def fetch_single_city(city, coords):
     )
     for attempt in range(3):
         try:
-            r = requests.get(url, timeout=15)
+            r = session.get(url, timeout=15)
             r.raise_for_status()
             data = r.json()
 
@@ -185,7 +189,7 @@ def fetch_single_city(city, coords):
             # ── AQI ─────────────────────────────────────────────────────────
             aqi_val = 50
             try:
-                aq      = requests.get(aqi_url, timeout=8).json()
+                aq      = session.get(aqi_url, timeout=8).json()
                 aqi_val = int(aq.get("current", {}).get("us_aqi") or 50)
             except: pass
             aqi_label, aqi_color = get_aqi_label(aqi_val)
@@ -241,7 +245,7 @@ def get_all_cities():
 def get_weather_data():
     all_c = get_all_cities()
     results = {}
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {executor.submit(fetch_single_city, city, coords): city
                    for city, coords in all_c.items()}
         for future in as_completed(futures):
@@ -286,11 +290,13 @@ def background_refresh():
 def get_cached_weather():
     """Return cached data. If stale/missing, trigger immediate refresh."""
     if is_cache_stale():
-        refresh_cache()
+        threading.Thread(target=refresh_cache, daemon=True).start()
     return _cache["weather"] or []
 
-_bg = threading.Thread(target=background_refresh, daemon=True)
-_bg.start()
+if __name__ == "__main__":
+    _bg = threading.Thread(target=background_refresh, daemon=True)
+    _bg.start()
+    app.run()
 
 def get_forecast(city_name):
     all_c = get_all_cities()
@@ -2754,7 +2760,7 @@ document.querySelectorAll('.city-card').forEach(card=>{
 
 // Set rawc on feat-temp
 const ft=document.getElementById('feat-temp');
-if(ft) ft.dataset.rawc = parseFloat(ft.textContent.replace(/[^0-9.\-]/g,'')) || 25;
+if(ft) ft.dataset.rawc = parseFloat(ft.textContent.replace(/[^0-9.\\-]/g,'')) || 25;
 
 // Draw chart immediately with seeded data
 const _initCity = document.getElementById('history-city-label')?.textContent?.trim();
