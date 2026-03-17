@@ -369,6 +369,17 @@ header{background:rgba(10,10,15,.96);backdrop-filter:blur(20px);-webkit-backdrop
 .search-wrap input:focus{border-color:var(--accent);}
 .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:.9rem;pointer-events:none;}
 /* #search-results styled via JS for guaranteed z-index above all stacking contexts */
+#search-results{
+  position: fixed;
+  z-index: 99999;
+  background: #111118;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.8);
+  max-height: 340px;
+  overflow-y: auto;
+  backdrop-filter: blur(10px);
+}
 .search-result-item{padding:10px 14px;font-family:'Space Mono',monospace;font-size:.7rem;color:#ccc;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.05);}
 .search-result-item:hover{background:rgba(232,68,26,.15);color:white;}
 .toolbar-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:7px 14px;color:#ccc;font-family:'Space Mono',monospace;font-size:.68rem;letter-spacing:1px;cursor:pointer;transition:all .2s;white-space:nowrap;}
@@ -1165,13 +1176,15 @@ let _searchResults = [];
 
 // Reposition search dropdown — position:fixed so viewport-relative, always above everything
 function _positionSearchDrop() {
-  const inp = document.getElementById('city-search');
-  const box = document.getElementById('search-results');
-  if (!inp || !box) return;
-  const r = inp.getBoundingClientRect();
-  box.style.top   = (r.bottom + 4) + 'px';   // viewport-relative, no scrollY needed
-  box.style.left  = r.left + 'px';
-  box.style.width = Math.max(r.width, 300) + 'px';
+  const input = document.getElementById("city-search");
+  const drop = document.getElementById("search-results");
+  if(!input || !drop) return;
+
+  const r = input.getBoundingClientRect();
+
+  drop.style.top = (r.bottom + 6) + "px";
+  drop.style.left = r.left + "px";
+  drop.style.width = r.width + "px";
 }
 // Reposition on scroll/resize
 window.addEventListener('scroll', _positionSearchDrop, true);
