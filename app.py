@@ -296,6 +296,8 @@ def get_cached_weather():
 if __name__ == "__main__":
     _bg = threading.Thread(target=background_refresh, daemon=True)
     _bg.start()
+    # _bg = threading.Thread(target=background_refresh, daemon=True)
+    # _bg.start()
     app.run()
 
 def get_forecast(city_name):
