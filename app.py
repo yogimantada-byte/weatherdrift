@@ -319,7 +319,8 @@ HTML_TEMPLATE = """
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="WeatherDrift">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230a0a0f'/><text y='.9em' font-size='80'>🌤️</text></svg>">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
 <style>
 :root {
   --ink:#0d0d12; --paper:#f5f0eb; --accent:#e8441a; --accent2:#ff6b35;
@@ -3671,6 +3672,50 @@ def health():
     return jsonify({"status": "ok", "cities": len(get_all_cities()), "cached": len(_cache["weather"] or [])})
 
 
+# ── WeatherDrift branded icon SVG (rendered as PNG via cairosvg or raw SVG) ──
+# Dark background + "WD" monogram + orange accent — no emoji (Chrome strips them)
+_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#0a0a0f"/>
+  <rect width="512" height="512" rx="80" fill="url(#grad)"/>
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a0a05"/>
+      <stop offset="100%" stop-color="#0a0a0f"/>
+    </linearGradient>
+  </defs>
+  <!-- Orange accent arc (sun) -->
+  <circle cx="256" cy="200" r="90" fill="none" stroke="#e8441a" stroke-width="28" stroke-dasharray="440 40"/>
+  <!-- Sun rays -->
+  <line x1="256" y1="80"  x2="256" y2="50"  stroke="#e8441a" stroke-width="14" stroke-linecap="round"/>
+  <line x1="356" y1="113" x2="376" y2="96"  stroke="#e8441a" stroke-width="14" stroke-linecap="round"/>
+  <line x1="390" y1="200" x2="420" y2="200" stroke="#e8441a" stroke-width="14" stroke-linecap="round"/>
+  <line x1="356" y1="287" x2="376" y2="304" stroke="#e8441a" stroke-width="14" stroke-linecap="round"/>
+  <line x1="156" y1="113" x2="136" y2="96"  stroke="#e8441a" stroke-width="14" stroke-linecap="round"/>
+  <line x1="122" y1="200" x2="92"  y2="200" stroke="#e8441a" stroke-width="14" stroke-linecap="round"/>
+  <!-- Cloud shape -->
+  <ellipse cx="200" cy="300" rx="70" ry="50" fill="#f2ede6"/>
+  <ellipse cx="270" cy="285" rx="85" ry="60" fill="#f2ede6"/>
+  <ellipse cx="340" cy="305" rx="60" ry="45" fill="#f2ede6"/>
+  <rect x="140" y="310" width="260" height="50" fill="#f2ede6"/>
+  <!-- "WD" text bottom -->
+  <text x="256" y="450" font-family="Arial Black,sans-serif" font-size="72" font-weight="900"
+        text-anchor="middle" fill="#e8441a" letter-spacing="4">WD</text>
+</svg>"""
+
+@app.route("/icon.svg")
+def pwa_icon_svg():
+    from flask import Response
+    return Response(_ICON_SVG, mimetype="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+@app.route("/icon-192.png")
+@app.route("/icon-512.png")
+def pwa_icon_png():
+    """Serve SVG as image/svg+xml — Chrome accepts this for PWA icons."""
+    from flask import Response
+    return Response(_ICON_SVG, mimetype="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
 @app.route("/manifest.json")
 def pwa_manifest():
     """PWA Web App Manifest — enables Add to Home Screen / Install."""
@@ -3684,13 +3729,16 @@ def pwa_manifest():
         "theme_color": "#e8441a",
         "orientation": "any",
         "icons": [
-            {"src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0a0f'/><text y='.9em' font-size='80'>🌤️</text></svg>",
-             "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable"},
-            {"src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0a0f'/><text y='.9em' font-size='80'>🌤️</text></svg>",
-             "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable"},
+            {"src": "/icon-192.png", "sizes": "192x192",
+             "type": "image/svg+xml", "purpose": "any"},
+            {"src": "/icon-512.png", "sizes": "512x512",
+             "type": "image/svg+xml", "purpose": "any maskable"},
+            {"src": "/icon.svg",     "sizes": "any",
+             "type": "image/svg+xml", "purpose": "any"},
         ],
         "categories": ["weather", "utilities"],
         "lang": "en",
+        "screenshots": [],
     }
     from flask import Response
     import json as _json
